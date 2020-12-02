@@ -23,8 +23,6 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 
-#include "TMC2209.h"
-
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -34,6 +32,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+
 
 #define pin_ra_stdby PB12
 #define pin_ra_dir PB13
@@ -148,10 +147,9 @@ I2C_HandleTypeDef hi2c1;
 RTC_HandleTypeDef hrtc;
 
 TIM_HandleTypeDef htim2;
-TIM_HandleTypeDef htim8;
-TIM_HandleTypeDef htim9;
 TIM_HandleTypeDef htim10;
 TIM_HandleTypeDef htim11;
+TIM_HandleTypeDef htim13;
 
 UART_HandleTypeDef huart4;
 UART_HandleTypeDef huart5;
@@ -199,18 +197,13 @@ int32_t ra_ustep_now, dec_ustep_now;
 
 float fast_spd_max = 1440;
 
-float gotospeed_table[4] = {
-	0.5,
-	fast_spd_max / 10.0,
-	fast_spd_max / 3.0,
-	fast_spd_max / 1.0
-};
+float gotospeed_table[4];
 
 float guide_speed = 0.5;
 float guide_ra_now = 0, guide_dec_now = 0;
 
-float gotospeed_hc_ra = fast_spd_max;
-float gotospeed_hc_dec = fast_spd_max;
+float gotospeed_hc_ra;
+float gotospeed_hc_dec;
 
 uint32_t time_now = 1606382480;
 //2020-11-18 22:00:00
@@ -229,8 +222,8 @@ float sdrl_day = 86164.0905, solar_day = 86400.0;
 float ra_spd_ratio_sdrl = 1, dec_spd_ratio_sdrl = 1;
 float ra_spd_ratio_solar = 1;
 
-float ra_tick_per_step = tim_counter_ra_max;
-float dec_tick_per_step = tim_counter_dec_max;
+float ra_tick_per_step;
+float dec_tick_per_step;
 
 int32_t ra_timer_remainder; //to track more accurately
 int32_t tim_counter_ra_remainder = 1e9;
@@ -284,10 +277,6 @@ char ser_buf[ser_bufsize];
 int ser_pos;
 int32_t ser_last;
 
-//TIMER2: buzzer
-//TIMER10: RA
-//TIMER11: DEC
-
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -303,13 +292,14 @@ static void MX_USART6_UART_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_RTC_Init(void);
 static void MX_TIM2_Init(void);
-static void MX_TIM9_Init(void);
 static void MX_TIM10_Init(void);
-static void MX_TIM8_Init(void);
 static void MX_TIM11_Init(void);
+static void MX_TIM13_Init(void);
 /* USER CODE BEGIN PFP */
 
 void led_set(int lednum, int ledstate);
+void hc_slew();
+void tim_guide_callback();
 
 /* USER CODE END PFP */
 
@@ -336,6 +326,69 @@ void led_set(int lednum, int ledstate) {
 		HAL_GPIO_WritePin(GPIOB, pin, GPIO_PIN_SET);
 	} else {
 		HAL_GPIO_WritePin(GPIOB, pin, GPIO_PIN_RESET);
+	}
+}
+
+void hc_slew() {
+	if (HC_STATE[0] == 1 && HC_STATE[1] == 0) { //Up
+		dec_spd_target = gotospeed_hc_dec;
+		state_dec_slew = STATE_SLEW_HC;
+	} else if (HC_STATE[0] == 0 && HC_STATE[1] == 1) { //Down
+		dec_spd_target = -gotospeed_hc_dec;
+		state_dec_slew = STATE_SLEW_HC;
+	} else if (HC_STATE[0] == 0 && HC_STATE[1] == 0) { //dec release
+		dec_spd_target = 0;
+		state_dec_slew = STATE_SLEW_HC_STOPPING;
+	} else {
+		dec_spd_target = 0;
+		state_dec_slew = STATE_SLEW_HC_STOPPING;
+	}
+	if (HC_STATE[2] == 1 && HC_STATE[3] == 0) { //Left
+		ra_spd_target = -gotospeed_hc_ra;
+		state_ra_slew = STATE_SLEW_HC;
+	} else if (HC_STATE[2] == 0 && HC_STATE[3] == 1) { //Right
+		ra_spd_target = gotospeed_hc_ra;
+		state_ra_slew = STATE_SLEW_HC;
+	} else if (HC_STATE[2] == 0 && HC_STATE[3] == 0) { //ra release
+		if (state_ra == STATE_TRACK) {
+			ra_spd_target = 1;
+		} else {
+			ra_spd_target = 0;
+		}
+		state_ra_slew = STATE_SLEW_HC_STOPPING;
+	} else {
+		if (state_ra == STATE_TRACK) {
+			ra_spd_target = 1;
+		} else {
+			ra_spd_target = 0;
+		}
+		state_ra_slew = STATE_SLEW_HC_STOPPING;
+	}
+}
+
+void tim_guide_callback() {
+	GUIDE_STATE[0] = HAL_GPIO_ReadPin(GUIDE2_GPIO_Port, GUIDE2_Pin) == GPIO_PIN_RESET ? 1 : 0;
+	GUIDE_STATE[1] = HAL_GPIO_ReadPin(GUIDE3_GPIO_Port, GUIDE3_Pin) == GPIO_PIN_RESET ? 1 : 0;
+	GUIDE_STATE[2] = HAL_GPIO_ReadPin(GUIDE1_GPIO_Port, GUIDE1_Pin) == GPIO_PIN_RESET ? 1 : 0;
+	GUIDE_STATE[3] = HAL_GPIO_ReadPin(GUIDE4_GPIO_Port, GUIDE4_Pin) == GPIO_PIN_RESET ? 1 : 0;
+
+	if (GUIDE_STATE[0] == 1 && GUIDE_STATE[1] == 0) { //Up
+		guide_dec_now = guide_speed;
+	} else if (GUIDE_STATE[0] == 0 && GUIDE_STATE[1] == 1) { //Down
+		guide_dec_now = -guide_speed;
+	} else if (GUIDE_STATE[0] == 0 && GUIDE_STATE[1] == 0) { //dec release
+		guide_dec_now = 0;
+	} else {
+		guide_dec_now = 0;
+	}
+	if (GUIDE_STATE[2] == 1 && GUIDE_STATE[3] == 0) { //Left
+		guide_ra_now = guide_speed;
+	} else if (GUIDE_STATE[2] == 0 && GUIDE_STATE[3] == 1) { //Right
+		guide_ra_now = -guide_speed;
+	} else if (GUIDE_STATE[2] == 0 && GUIDE_STATE[3] == 0) { //ra release
+		guide_ra_now = 0;
+	} else {
+		guide_ra_now = 0;
 	}
 }
 
@@ -379,11 +432,21 @@ int main(void)
   MX_I2C1_Init();
   MX_RTC_Init();
   MX_TIM2_Init();
-  MX_TIM9_Init();
   MX_TIM10_Init();
-  MX_TIM8_Init();
   MX_TIM11_Init();
+  MX_TIM13_Init();
   /* USER CODE BEGIN 2 */
+
+  gotospeed_table[0] = 0.5;
+  gotospeed_table[1] = fast_spd_max / 10.0;
+  gotospeed_table[2] = fast_spd_max / 3.0;
+  gotospeed_table[3] = fast_spd_max / 1.0;
+
+  gotospeed_hc_ra = fast_spd_max;
+  gotospeed_hc_dec = fast_spd_max;
+
+  ra_tick_per_step = tim_counter_ra_max;
+  dec_tick_per_step = tim_counter_dec_max;
 
   /* USER CODE END 2 */
 
@@ -570,11 +633,11 @@ static void MX_RTC_Init(void)
 
   /** Initialize RTC and set the Time and Date
   */
-  sTime.Hours = 0x0;
-  sTime.Minutes = 0x0;
-  sTime.Seconds = 0x0;
+  sTime.Hours = 0x20;
+  sTime.Minutes = 0x14;
+  sTime.Seconds = 0x50;
   sTime.DayLightSaving = RTC_DAYLIGHTSAVING_NONE;
-  sTime.StoreOperation = RTC_STOREOPERATION_RESET;
+  sTime.StoreOperation = RTC_STOREOPERATION_SET;
   if (HAL_RTC_SetTime(&hrtc, &sTime, RTC_FORMAT_BCD) != HAL_OK)
   {
     Error_Handler();
@@ -644,132 +707,6 @@ static void MX_TIM2_Init(void)
 }
 
 /**
-  * @brief TIM8 Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_TIM8_Init(void)
-{
-
-  /* USER CODE BEGIN TIM8_Init 0 */
-
-  /* USER CODE END TIM8_Init 0 */
-
-  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
-  TIM_MasterConfigTypeDef sMasterConfig = {0};
-  TIM_OC_InitTypeDef sConfigOC = {0};
-  TIM_BreakDeadTimeConfigTypeDef sBreakDeadTimeConfig = {0};
-
-  /* USER CODE BEGIN TIM8_Init 1 */
-
-  /* USER CODE END TIM8_Init 1 */
-  htim8.Instance = TIM8;
-  htim8.Init.Prescaler = 0;
-  htim8.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim8.Init.Period = 65535;
-  htim8.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-  htim8.Init.RepetitionCounter = 0;
-  htim8.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
-  if (HAL_TIM_Base_Init(&htim8) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
-  if (HAL_TIM_ConfigClockSource(&htim8, &sClockSourceConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  if (HAL_TIM_OC_Init(&htim8) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
-  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
-  if (HAL_TIMEx_MasterConfigSynchronization(&htim8, &sMasterConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  sConfigOC.OCMode = TIM_OCMODE_TIMING;
-  sConfigOC.Pulse = 0;
-  sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
-  sConfigOC.OCNPolarity = TIM_OCNPOLARITY_HIGH;
-  sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
-  sConfigOC.OCIdleState = TIM_OCIDLESTATE_RESET;
-  sConfigOC.OCNIdleState = TIM_OCNIDLESTATE_RESET;
-  if (HAL_TIM_OC_ConfigChannel(&htim8, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  sBreakDeadTimeConfig.OffStateRunMode = TIM_OSSR_DISABLE;
-  sBreakDeadTimeConfig.OffStateIDLEMode = TIM_OSSI_DISABLE;
-  sBreakDeadTimeConfig.LockLevel = TIM_LOCKLEVEL_OFF;
-  sBreakDeadTimeConfig.DeadTime = 0;
-  sBreakDeadTimeConfig.BreakState = TIM_BREAK_DISABLE;
-  sBreakDeadTimeConfig.BreakPolarity = TIM_BREAKPOLARITY_HIGH;
-  sBreakDeadTimeConfig.AutomaticOutput = TIM_AUTOMATICOUTPUT_DISABLE;
-  if (HAL_TIMEx_ConfigBreakDeadTime(&htim8, &sBreakDeadTimeConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN TIM8_Init 2 */
-
-  /* USER CODE END TIM8_Init 2 */
-
-}
-
-/**
-  * @brief TIM9 Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_TIM9_Init(void)
-{
-
-  /* USER CODE BEGIN TIM9_Init 0 */
-
-  /* USER CODE END TIM9_Init 0 */
-
-  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
-  TIM_OC_InitTypeDef sConfigOC = {0};
-
-  /* USER CODE BEGIN TIM9_Init 1 */
-
-  /* USER CODE END TIM9_Init 1 */
-  htim9.Instance = TIM9;
-  htim9.Init.Prescaler = 0;
-  htim9.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim9.Init.Period = 65535;
-  htim9.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-  htim9.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
-  if (HAL_TIM_Base_Init(&htim9) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
-  if (HAL_TIM_ConfigClockSource(&htim9, &sClockSourceConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  if (HAL_TIM_PWM_Init(&htim9) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  sConfigOC.OCMode = TIM_OCMODE_PWM1;
-  sConfigOC.Pulse = 0;
-  sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
-  sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
-  if (HAL_TIM_PWM_ConfigChannel(&htim9, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  __HAL_TIM_DISABLE_OCxPRELOAD(&htim9, TIM_CHANNEL_1);
-  /* USER CODE BEGIN TIM9_Init 2 */
-
-  /* USER CODE END TIM9_Init 2 */
-
-}
-
-/**
   * @brief TIM10 Initialization Function
   * @param None
   * @retval None
@@ -789,7 +726,7 @@ static void MX_TIM10_Init(void)
   htim10.Instance = TIM10;
   htim10.Init.Prescaler = 168;
   htim10.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim10.Init.Period = 65535;
+  htim10.Init.Period = 10;
   htim10.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim10.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim10) != HAL_OK)
@@ -832,9 +769,9 @@ static void MX_TIM11_Init(void)
 
   /* USER CODE END TIM11_Init 1 */
   htim11.Instance = TIM11;
-  htim11.Init.Prescaler = 0;
+  htim11.Init.Prescaler = 168;
   htim11.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim11.Init.Period = 65535;
+  htim11.Init.Period = 10;
   htim11.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim11.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim11) != HAL_OK)
@@ -856,6 +793,51 @@ static void MX_TIM11_Init(void)
   /* USER CODE BEGIN TIM11_Init 2 */
 
   /* USER CODE END TIM11_Init 2 */
+
+}
+
+/**
+  * @brief TIM13 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM13_Init(void)
+{
+
+  /* USER CODE BEGIN TIM13_Init 0 */
+
+  /* USER CODE END TIM13_Init 0 */
+
+  TIM_OC_InitTypeDef sConfigOC = {0};
+
+  /* USER CODE BEGIN TIM13_Init 1 */
+
+  /* USER CODE END TIM13_Init 1 */
+  htim13.Instance = TIM13;
+  htim13.Init.Prescaler = 16800;
+  htim13.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim13.Init.Period = 100;
+  htim13.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim13.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
+  if (HAL_TIM_Base_Init(&htim13) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_TIM_OC_Init(&htim13) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sConfigOC.OCMode = TIM_OCMODE_TIMING;
+  sConfigOC.Pulse = 0;
+  sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
+  sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
+  if (HAL_TIM_OC_ConfigChannel(&htim13, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM13_Init 2 */
+
+  /* USER CODE END TIM13_Init 2 */
 
 }
 
@@ -1090,6 +1072,14 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(ESP_PROG_GPIO_Port, &GPIO_InitStruct);
 
+  /*Configure GPIO pins : GUIDE1_Pin GUIDE2_Pin GUIDE3_Pin GUIDE4_Pin
+                           DIAG2_Pin */
+  GPIO_InitStruct.Pin = GUIDE1_Pin|GUIDE2_Pin|GUIDE3_Pin|GUIDE4_Pin
+                          |DIAG2_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
+
   /*Configure GPIO pins : STEP2_Pin DIR2_Pin STDBY2_Pin STDBY1_Pin */
   GPIO_InitStruct.Pin = STEP2_Pin|DIR2_Pin|STDBY2_Pin|STDBY1_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
@@ -1102,12 +1092,6 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-
-  /*Configure GPIO pin : DIAG2_Pin */
-  GPIO_InitStruct.Pin = DIAG2_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  HAL_GPIO_Init(DIAG2_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pins : NENBL2_Pin STEP1_Pin DIR1_Pin */
   GPIO_InitStruct.Pin = NENBL2_Pin|STEP1_Pin|DIR1_Pin;
@@ -1139,7 +1123,10 @@ void Error_Handler(void)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
   /* User can add his own implementation to report the HAL error return state */
-
+  __disable_irq();
+  while (1)
+  {
+  }
   /* USER CODE END Error_Handler_Debug */
 }
 
@@ -1155,7 +1142,7 @@ void assert_failed(uint8_t *file, uint32_t line)
 {
   /* USER CODE BEGIN 6 */
   /* User can add his own implementation to report the file name and line number,
-     tex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
+     ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
   /* USER CODE END 6 */
 }
 #endif /* USE_FULL_ASSERT */

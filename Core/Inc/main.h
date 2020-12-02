@@ -57,11 +57,21 @@ void Error_Handler(void);
 
 /* USER CODE BEGIN EFP */
 
+extern void tim_guide_callback();
+
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
 #define ESP_PROG_Pin GPIO_PIN_13
 #define ESP_PROG_GPIO_Port GPIOC
+#define GUIDE1_Pin GPIO_PIN_0
+#define GUIDE1_GPIO_Port GPIOC
+#define GUIDE2_Pin GPIO_PIN_1
+#define GUIDE2_GPIO_Port GPIOC
+#define GUIDE3_Pin GPIO_PIN_2
+#define GUIDE3_GPIO_Port GPIOC
+#define GUIDE4_Pin GPIO_PIN_3
+#define GUIDE4_GPIO_Port GPIOC
 #define MUART2_TX_Pin GPIO_PIN_0
 #define MUART2_TX_GPIO_Port GPIOA
 #define MUART2_Pin GPIO_PIN_1
