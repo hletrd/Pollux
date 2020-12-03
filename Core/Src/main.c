@@ -210,13 +210,13 @@ float guide_ra_now = 0, guide_dec_now = 0;
 float gotospeed_hc_ra;
 float gotospeed_hc_dec;
 
-uint32_t time_now = 1606382480;
+//uint32_t time_now = 1606382480;
 //2020-11-18 22:00:00
 uint32_t time_offset_local = 32400;
 
-int64_t ra_pos_now, dec_pos_now; //RA, DEC pos of moving mount.
-int64_t ra_pos_target, dec_pos_target;
-int64_t ra_pos_offset, dec_pos_offset;
+volatile int64_t ra_pos_now, dec_pos_now; //RA, DEC pos of moving mount.
+volatile int64_t ra_pos_target, dec_pos_target;
+volatile int64_t ra_pos_offset, dec_pos_offset;
 
 //absolute RA of target object (tracking compensation)
 double ra_pos_diff;
@@ -241,7 +241,7 @@ float tim_acc_freq;
 float tim_goto_freq;
 
 int dir_ra_target = 1, dir_dec_target = 1;
-int dir_ra_now = 1, dir_dec_now = 1;
+volatile int dir_ra_now = 1, dir_dec_now = 1;
 
 float ra_current_fast = 0.4, ra_current_slow = 0.03;
 float dec_current_fast = 0.4, dec_current_slow = 0.03;
@@ -251,10 +251,10 @@ int state_dec_currentmode = MODE_SLOW;
 int state_ra_ustepmode = MODE_SLOW;
 int state_dec_ustepmode = MODE_SLOW;
 
-float ra_spd_now = 0;
-float dec_spd_now = 0;
-float ra_spd_target = 0;
-float dec_spd_target = 0;
+volatile float ra_spd_now = 0;
+volatile float dec_spd_now = 0;
+volatile float ra_spd_target = 0;
+volatile float dec_spd_target = 0;
 
 int state_ra = STATE_STOP;
 int state_dec = STATE_STOP;
