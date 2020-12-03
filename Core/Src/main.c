@@ -25,6 +25,8 @@
 
 #include <stdio.h>
 #include <math.h>
+#include <time.h>
+#include <string.h>
 
 /* USER CODE END Includes */
 
@@ -528,7 +530,7 @@ void goto_slew() {
 }
 
 void serial_decode() {
-	char output[100];
+	uint8_t output[100];
 	int32_t tmp;
 	if (ser_pos >= 2 && ser_buf[0] == ':' && ser_buf[ser_pos-1] == '#') {
 		switch (ser_buf[1]) {
@@ -734,7 +736,11 @@ void serial_decode() {
 							dd = atoi_2(ser_buf+6);
 							yy = atoi_2(ser_buf+9);
 							if (0 < mm && mm < 13 && 0 < dd && dd < 32) {
-								setTime(hour(), minute(), second(), dd, mm, yy);
+								RTC_DateTypeDef datenow;
+								datenow.Year = yy;
+								datenow.Month = mm;
+								datenow.Date = dd;
+								set_date_now(datenow);
 							} else {
 								uart_print("0");
 							}
@@ -786,11 +792,38 @@ void serial_decode() {
 							hour += (ser_buf[4] - 48) * 100;
 							hour += (ser_buf[5] - 48) * 10;
 							hour += (ser_buf[7] - 48);
-							//time_t time_now_tmp = now();
-							//time_now_tmp -= time_offset_local;
-							//time_offset_local = hour * 3600 / 10;
-							//setTime(time_now_tmp + time_offset_local);
 
+							tm time_tmp;
+							RTC_TimeTypeDef timenow;
+							RTC_DateTypeDef datenow;
+							timenow = get_time_now();
+							datenow = get_date_now();
+							time_tmp.tm_year = datenow.Year+100; // 1900 vs 2000
+							time_tmp.tm_mon = datenow.Month-1;
+							time_tmp.tm_mday = datenow.Date;
+							time_tmp.tm_wday = datenow.WeekDay;
+							time_tmp.tm_hour = timenow.Hours;
+							time_tmp.tm_min = timenow.Minutes;
+							time_tmp.tm_sec = timenow.Seconds;
+							time_t time_t_tmp = mktime(time_tmp);
+							time_t_tmp -= time_offset_local;
+							time_offset_local = hour * 3600 / 10;
+							time_t_tmp += time_offset_local;
+
+							tm time_new;
+							RTC_TimeTypeDef timenow_new;
+							RTC_DateTypeDef datenow_new;
+
+							time_new = gmtime(time_t_tmp);
+							timenow_new.Hours = time_new.tm_hour;
+							timenow_new.Minutes = time_new.tm_min;
+							timenow_new.Seconds = time_new.tm_sec;
+							datenow_new.Year = time_new.tm_year-100; // 1900 vs 2000
+							datenow_new.Month = time_new.tm_mon+1;
+							datenow_new.Date = time_new.tm_mday;
+							datenow_new.WeekDay = time_new.tm_wday;
+							set_time_now(time_new);
+							set_date_now(date_new);
 							uart_print("1");
 						} else {
 							uart_print("0");
@@ -874,6 +907,30 @@ void set_time_now(RTC_TimeTypeDef time_now) {
 
 void set_date_now(RTC_DateTypeDef date_now) {
 	HAL_RTC_SetDate(&hrtc, &time_now, RTC_FORMAT_BIN);
+}
+
+void serial_process() {
+	while (Serial.available() > 0) {
+		ser_buf[ser_pos] = Serial.read();
+		ser_pos++;
+		ser_last = millis();
+		if (ser_buf[0] != ':') {
+			ser_pos = 0;
+		} else if (ser_buf[ser_pos-1] == '#') {
+			serial_decode();
+			ser_pos = 0;
+		}
+		if (ser_pos > ser_bufsize) {
+			ser_pos = 0;
+		}
+	}
+}
+
+void serial_clear() {
+	if (millis() - ser_last > 100) {
+		while (Serial.available() > 0) Serial.read();
+		ser_pos = 0;
+	}
 }
 
 /* USER CODE END 0 */
