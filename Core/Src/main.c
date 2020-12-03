@@ -23,6 +23,9 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 
+#include <stdio.h>
+#include <math.h>
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -300,6 +303,26 @@ static void MX_TIM13_Init(void);
 void led_set(int lednum, int ledstate);
 void hc_slew();
 void tim_guide_callback();
+int32_t get_ra_second();
+int32_t get_ra_second_target();
+int32_t convert_ra_to_second(float ra_abs);
+int64_t convert_ra_to_ustep(float ra_second);
+int32_t get_dec_second();
+int32_t convert_dec_to_second(float dec_abs);
+int64_t convert_dec_to_ustep(float dec_second);
+void set_ra_second(int32_t ra_second);
+void set_ra_second_target(int32_t ra_second);
+void set_dec_second(int32_t dec_second);
+void set_dec_second_target(int32_t dec_second);
+void sync();
+int atoi_2(char* input) ;
+void goto_slew();
+void serial_decode();
+void uart_print(uint8_t* output);
+RTC_TimeTypeDef get_time_now();
+RTC_DateTypeDef get_date_now();
+void set_time_now(RTC_TimeTypeDef time_now);
+void set_date_now(RTC_DateTypeDef date_now);
 
 /* USER CODE END PFP */
 
@@ -307,7 +330,7 @@ void tim_guide_callback();
 /* USER CODE BEGIN 0 */
 
 void led_set(int lednum, int ledstate) {
-	int pin;
+	int pin = 0;
 	switch (lednum) {
 		case 0:
 			pin = LED_Y_Pin;
@@ -390,6 +413,467 @@ void tim_guide_callback() {
 	} else {
 		guide_ra_now = 0;
 	}
+}
+
+int32_t get_ra_second() {
+	int64_t ra_pos_tmp = ra_pos_now + ra_pos_diff;
+	if (ra_pos_tmp < 0) ra_pos_tmp += ra_ustep_per_rev;
+	ra_pos_tmp %= ra_ustep_per_rev;
+	float tmp = ((float)ra_pos_tmp) / ra_ustep_per_rev;
+	return convert_ra_to_second(tmp);
+}
+
+int32_t get_ra_second_target() {
+	int64_t ra_pos_tmp = ra_pos_target;
+	if (ra_pos_tmp < 0) ra_pos_tmp += ra_ustep_per_rev;
+	ra_pos_tmp %= ra_ustep_per_rev;
+	float tmp = ra_pos_target / (float)ra_ustep_per_rev;
+	return convert_ra_to_second(tmp);
+}
+
+int32_t convert_ra_to_second(float ra_abs) {
+	int32_t ra_second_ratio = 24*60*60;
+	return ra_second_ratio * ra_abs;
+}
+
+int64_t convert_ra_to_ustep(float ra_second) {
+	double ra_second_ratio = 24*60*60;
+	double tmp = ra_second / ra_second_ratio;
+	return (int64_t)(tmp * ra_ustep_per_rev);
+}
+
+int32_t get_dec_second() {
+	int64_t dec_pos_tmp = dec_pos_now + dec_pos_offset;
+	if (dec_pos_tmp < 0) dec_pos_tmp += dec_ustep_per_rev;
+	float tmp = ((float)dec_pos_tmp) / dec_ustep_per_rev;
+	return convert_dec_to_second(tmp);
+}
+
+int32_t convert_dec_to_second(float dec_abs) {
+	int32_t dec_second_ratio = 90*60*60;
+	int32_t result;
+	if (dec_abs < 0.25) {
+		result = (0.25-dec_abs)*4*dec_second_ratio;
+	} else if (dec_abs < 0.5) {
+		result = (0.25-dec_abs)*4*dec_second_ratio;
+	} else if (dec_abs < 0.75) {
+		result = (dec_abs-0.75)*4*dec_second_ratio;
+	} else {
+		result = (dec_abs-0.75)*4*dec_second_ratio;
+	}
+	return result;
+}
+
+int64_t convert_dec_to_ustep(float dec_second) {
+	double dec_second_ratio = 90*60*60;
+	double tmp = dec_second / dec_second_ratio;
+	return (int64_t)(tmp * dec_ustep_per_rev);
+}
+
+void set_ra_second(int32_t ra_second) { //overwrite current setttings (SYNC)
+	float ra_second_ratio = 24*60*60;
+	ra_pos_diff = (double)(ra_pos_target - ra_pos_now);
+}
+
+void set_ra_second_target(int32_t ra_second) {
+	float ra_second_ratio = 24*60*60;
+	ra_pos_target = (float) ra_second / ra_second_ratio * ra_ustep_per_rev;
+}
+
+void set_dec_second(int32_t dec_second) { //overwrite current setttings (SYNC)
+	int64_t dec_pos_tmp = dec_pos_now + dec_pos_offset;
+	if (dec_pos_tmp < 0) dec_pos_tmp += dec_ustep_per_rev;
+	float tmp = (float) (dec_pos_tmp) / dec_ustep_per_rev;
+	float dec_second_ratio = 90*60*60;
+	//considering meridian
+	if (tmp + ((float)dec_second/4.0/dec_second_ratio)+0.25 < 0.5) { //align to closer point
+		tmp = -((float)dec_second/4.0/dec_second_ratio)+0.25;
+	} else {
+		tmp = ((float)dec_second/4.0/dec_second_ratio)+0.75;
+	}
+	dec_pos_now = (int64_t) (tmp * dec_ustep_per_rev);
+}
+
+void set_dec_second_target(int32_t dec_second) {
+	int64_t dec_pos_tmp = dec_pos_now + dec_pos_offset;
+	if (dec_pos_tmp < 0) dec_pos_tmp += dec_ustep_per_rev;
+	float tmp = (float) (dec_pos_tmp) / dec_ustep_per_rev;
+	float dec_second_ratio = 90*60*60;
+	//considering meridian
+	if (tmp < 0.5) {
+		tmp = -((float)dec_second/4.0/dec_second_ratio)+0.25;
+	} else {
+		tmp = ((float)dec_second/4.0/dec_second_ratio)+0.75;
+	}
+	dec_pos_target = (int64_t) (tmp * dec_ustep_per_rev);
+}
+
+void sync() {
+	ra_pos_diff = (ra_pos_target - ra_pos_now) % ra_ustep_per_rev;
+	dec_pos_offset = (dec_pos_now - dec_pos_target) % dec_ustep_per_rev;
+}
+
+int atoi_2(char* input) {
+	int result;
+	if (input[0] >= 48 && input[0] < 58 && input[1] >= 48 && input[1] < 58) {
+		result = (input[0] - 48) * 10 + (input[1] - 48);
+	} else {
+		result = 0;
+	}
+	return result;
+}
+
+void goto_slew() {
+
+}
+
+void serial_decode() {
+	char output[100];
+	int32_t tmp;
+	if (ser_pos >= 2 && ser_buf[0] == ':' && ser_buf[ser_pos-1] == '#') {
+		switch (ser_buf[1]) {
+			case 'A': //Alignment commands
+				break;
+			case 'B': //Reticule/Accessory control: unsupported
+				break;
+			case 'C': //Sync control
+				if (ser_pos < 4) break;
+				switch(ser_buf[2]) {
+					case 'L': //sync to current target
+						sync();
+						break;
+				}
+				break;
+			case 'D': //Distance bars: unsupported
+				break;
+			case 'f': //fan command
+				if (ser_pos < 4) break;
+				switch(ser_buf[2]) {
+					case 'T': //temperature
+						break;
+				}
+				break;
+			case 'F': //focuser control: unsupported
+				break;
+			case 'g': //GPS commands
+				break;
+			case 'G':
+				if (ser_pos < 4) break;
+				switch (ser_buf[2]) {
+					case 'a': //returns current local time in 12 hour format
+						sprintf(output, "%02ld:%02ld:%02ld#", hour()%12, minute(), second());
+						uart_print(output);
+						break;
+					case 'C': //returns current date
+						sprintf(output, "%02ld/%02ld/%02ld#", month(), day(), year()%100);
+						uart_print(output);
+						break;
+					case 'D': //returns current declination
+						tmp = get_dec_second();
+						if (tmp > 0)
+							sprintf(output, "%c%02ld*%02ld'%02ld#", '+', tmp/3600, tmp/60%60, tmp%60);
+						else
+							sprintf(output, "%c%02ld*%02ld'%02ld#", '-', -tmp/3600, -tmp/60%60, -tmp%60);
+						uart_print(output);
+						break;
+					case 'd': //returns current object declination
+						tmp = convert_dec_to_second((float)dec_pos_target / dec_ustep_per_rev);
+						if (tmp > 0)
+							sprintf(output, "%c%02ld*%02ld'%02ld#", '+', tmp/3600, tmp/60%60, tmp%60);
+						else
+							sprintf(output, "%c%02ld*%02ld'%02ld#", '-', -tmp/3600, -tmp/60%60, -tmp%60);
+						uart_print(output);
+						break;
+					case 'G': //returns UTC offset
+						if (time_offset_local % 3600 == 0) {
+							sprintf(output, "s%02ld#", time_offset_local / 3600);
+							uart_print(output);
+						} else {
+							sprintf(output, "s%02ld.%01ld#", time_offset_local / 3600, time_offset_local / 3600 * 10 % 10);
+							uart_print(output);
+						}
+						break;
+					case 'g': //returns current longitude
+						sprintf(output, "%.2f", -site_lon);
+						uart_print(output);
+						break;
+					case 'L': //returns current local time in 24 hour format
+						sprintf(output, "%02ld:%02ld:%02ld#", hour(), minute(), second());
+						uart_print(output);
+						break;
+					case 'R': //returns current RA position
+						tmp = get_ra_second();
+						sprintf(output, "%02ld:%02ld:%02ld#", tmp / 3600, tmp / 60 % 60, tmp % 60);
+						uart_print(output);
+						break;
+					case 'r': //returns current target RA position
+						tmp = get_ra_second_target();
+						sprintf(output, "%02ld:%02ld:%02ld#", tmp / 3600, tmp / 60 % 60, tmp % 60);
+						uart_print(output);
+						break;
+					case 'S': //TODO: returns siderial time
+						break;
+					case 'T': //get tracking rate? TODO
+						break;
+					case 't': //returns current latitude
+						sprintf(output, "%.2f", site_lat);
+						uart_print(output);
+						break;
+					case 'V': //Telescope version informations (incompatible with LX200s)
+						if (ser_pos < 5) break;
+						switch(ser_buf[3]) {
+							case 'D':
+								uart_print(firmware_date);
+								break;
+							case 'N':
+								uart_print(firmware_version);
+								break;
+							case 'P':
+								uart_print(product_name);
+								break;
+							case 'T':
+								uart_print(firmware_time);
+								break;
+						}
+						uart_print('#');
+						break;
+				}
+				break;
+			case 'h': //Home position commands: unsupported
+				break;
+			case 'H': //Time format commands
+				break;
+			case 'I': //Initialize command: unsupported
+				break;
+			case 'L': //Object library command: unsupported
+				break;
+			case 'M': //Telescope movement
+				if (ser_pos < 4) break;
+				switch (ser_buf[2]) {
+					case 'e':
+						HC_STATE[3] = 1;
+						break;
+					case 'n':
+						HC_STATE[0] = 1;
+						break;
+					case 's':
+						HC_STATE[1] = 1;
+						break;
+					case 'w':
+						HC_STATE[2] = 1;
+						break;
+					case 'S':
+						goto_target();
+						break;
+				}
+				hc_slew();
+				break;
+			case 'P': //High precision toggle
+				break;
+			case 'Q': //Quit movement
+				if (ser_pos == 3) { //TODO: halt current GOTO
+					HC_STATE[0] = 0;
+					HC_STATE[1] = 0;
+					HC_STATE[2] = 0;
+					HC_STATE[3] = 0;
+					hc_slew();
+					break;
+				}
+				switch (ser_buf[2]) {
+					case 'w':
+						HC_STATE[2] = 0;
+						break;
+					case 'n':
+						HC_STATE[0] = 0;
+						break;
+					case 's':
+						HC_STATE[1] = 0;
+						break;
+					case 'e':
+						HC_STATE[3] = 0;
+						break;
+				}
+				hc_slew();
+				break;
+			case 'r': //Field derotator: unsupported
+				break;
+			case 'R': //Slew rate commands
+				if (ser_pos < 4) break;
+				switch (ser_buf[2]) {
+					case 'C':
+						gotospeed_hc_ra = gotospeed_table[1];
+						gotospeed_hc_dec = gotospeed_table[1];
+						break;
+					case 'G':
+						gotospeed_hc_ra = gotospeed_table[0];
+						gotospeed_hc_dec = gotospeed_table[0];
+						break;
+					case 'M':
+						gotospeed_hc_ra = gotospeed_table[2];
+						gotospeed_hc_dec = gotospeed_table[2];
+						break;
+					case 'S':
+						gotospeed_hc_ra = gotospeed_table[3];
+						gotospeed_hc_dec = gotospeed_table[3];
+						break;
+					case 'A':
+						if (ser_pos < 8) break;
+						break;
+					case 'E':
+						if (ser_pos < 8) break;
+						break;
+				}
+				break;
+			case 'S': //Set command
+				if (ser_pos < 4) break;
+				switch (ser_buf[2]) {
+					case 'C': //set date
+						if (ser_pos == 12) {
+							int yy, mm, dd;
+							mm = atoi_2(ser_buf+3);
+							dd = atoi_2(ser_buf+6);
+							yy = atoi_2(ser_buf+9);
+							if (0 < mm && mm < 13 && 0 < dd && dd < 32) {
+								setTime(hour(), minute(), second(), dd, mm, yy);
+							} else {
+								uart_print("0");
+							}
+							uart_print("1");
+						} else {
+							uart_print("0");
+						}
+						break;
+					case 'd': //set dec
+						if (ser_pos == 10 || ser_pos == 13) {
+							int32_t dd, mm, ss, sign;
+							int32_t dec_second;
+							dd = atoi_2(ser_buf+4);
+							mm = atoi_2(ser_buf+7);
+							ss = 0;
+							if (ser_pos == 13) ss = atoi_2(ser_buf+10);
+							sign = (ser_buf[3]=='-')?-1:1;
+							dec_second = (dd*60*60 + mm*60 + ss) * sign;
+							set_dec_second_target(dec_second);
+							uart_print("1");
+						} else {
+							uart_print("0");
+						}
+						break;
+					case 'r': //set ra
+						if (ser_pos == 11 || ser_pos == 12) {
+							int32_t hh, mm, ss = 0;
+							int32_t ra_second;
+							hh = atoi_2(ser_buf+3);
+							mm = atoi_2(ser_buf+6);
+							if (ser_pos == 11) {
+								if (ser_buf[9] >= 48 && ser_buf[9] < 58) {
+									ss = 6 * (ser_buf[9] - 48);
+								}
+							} else {
+								ss = atoi_2(ser_buf+9);
+							}
+							ra_second = (hh*60*60 + mm*60 + ss);
+							set_ra_second_target(ra_second);
+							uart_print("1");
+						} else {
+							uart_print("0");
+						}
+						break;
+					case 'G': //Set local time - UTC
+						if (ser_pos == 9) {
+							int32_t sign = ser_buf[3] == '+'?1:-1;
+							int32_t hour = 0;
+							hour += (ser_buf[4] - 48) * 100;
+							hour += (ser_buf[5] - 48) * 10;
+							hour += (ser_buf[7] - 48);
+							//time_t time_now_tmp = now();
+							//time_now_tmp -= time_offset_local;
+							//time_offset_local = hour * 3600 / 10;
+							//setTime(time_now_tmp + time_offset_local);
+
+							uart_print("1");
+						} else {
+							uart_print("0");
+						}
+						break;
+					case 'L': //Set local time
+						if (ser_pos == 12) {
+							int32_t hh, mm, ss;
+							int32_t time_second;
+							hh = atoi_2(ser_buf+3);
+							mm = atoi_2(ser_buf+6);
+							ss = atoi_2(ser_buf+9);
+							RTC_TimeTypeDef timenow;
+							//RTC_DateTypeDef datenow;
+							timenow = get_time_now();
+							//datenow = get_date_now();
+							//int32_t yy = datenow.Year, mmm = datenow.Month, dd = datenow.Date;
+							timenow.Hours = (uint8_t)hh;
+							timenow.Minutes = (uint8_t)mm;
+							timenow.Seconds = (uint8_t)ss;
+							set_time_now(timenow);
+							uart_print("1");
+						} else {
+							uart_print("0");
+						}
+						break;
+				}
+				break;
+			case 'T': //Tracking commands
+				break;
+			case 'U': //Precision toggle
+			break;
+			case 'W': //Site select
+			break;
+			case 'J':
+				if (ser_pos < 4) break;
+				switch (ser_buf[2]) {
+					case 'R': //reset
+						if (ser_pos < 5) break;
+						switch (ser_buf[3]) {
+							case 'r': //reset RA
+								reset_motor(RA);
+								uart_print("Reset RA");
+								break;
+							case 'd': //reset DEC
+								reset_motor(DEC);
+								uart_print("Reset DEC");
+								break;
+						}
+						break;
+					case 'D': //toggle debug
+						debugmode = 1 - debugmode;
+						break;
+				}
+				break;
+		}
+	}
+}
+
+void uart_print(uint8_t* output) {
+	HAL_UART_Transmit(&huart1, output, sizeof(output), HAL_MAX_DELAY);
+}
+
+RTC_TimeTypeDef get_time_now() {
+	RTC_TimeTypeDef tmp;
+	HAL_RTC_GetTime(&hrtc, &tmp, RTC_FORMAT_BIN);
+	return tmp;
+}
+
+RTC_DateTypeDef get_date_now() {
+	RTC_TimeTypeDef tmp_time;
+	RTC_DateTypeDef tmp_date;
+	HAL_RTC_GetTime(&hrtc, &tmp_time, RTC_FORMAT_BIN);
+	HAL_RTC_GetDate(&hrtc, &tmp_date, RTC_FORMAT_BIN);
+	return tmp_date;
+}
+
+void set_time_now(RTC_TimeTypeDef time_now) {
+	HAL_RTC_SetTime(&hrtc, &time_now, RTC_FORMAT_BIN);
+}
+
+void set_date_now(RTC_DateTypeDef date_now) {
+	HAL_RTC_SetDate(&hrtc, &time_now, RTC_FORMAT_BIN);
 }
 
 /* USER CODE END 0 */
@@ -617,8 +1101,8 @@ static void MX_RTC_Init(void)
   */
   hrtc.Instance = RTC;
   hrtc.Init.HourFormat = RTC_HOURFORMAT_24;
-  hrtc.Init.AsynchPrediv = 127;
-  hrtc.Init.SynchPrediv = 255;
+  hrtc.Init.AsynchPrediv = 125;
+  hrtc.Init.SynchPrediv = 3200;
   hrtc.Init.OutPut = RTC_OUTPUT_DISABLE;
   hrtc.Init.OutPutPolarity = RTC_OUTPUT_POLARITY_HIGH;
   hrtc.Init.OutPutType = RTC_OUTPUT_TYPE_OPENDRAIN;
