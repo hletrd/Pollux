@@ -25,6 +25,7 @@
 
 #include <stdio.h>
 #include <math.h>
+#include <stdlib.h>
 #include <time.h>
 #include <string.h>
 
@@ -38,54 +39,6 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 
-
-#define pin_ra_stdby PB12
-#define pin_ra_dir PB13
-#define pin_ra_step PB14
-#define pin_ra_tx PB15
-#define pin_ra_rx PC6
-#define pin_ra_index PC7
-#define pin_ra_diag PC8
-#define pin_ra_nenbl PC9
-
-#define pin_dec_stdby PA7
-#define pin_dec_dir PC4
-#define pin_dec_step PC5
-#define pin_dec_tx PB0
-#define pin_dec_rx PB1
-#define pin_dec_index PB2
-#define pin_dec_diag PB10
-#define pin_dec_nenbl PB11
-
-#define pin_buzzer PA11
-
-#define pin_hc_tx PA0
-#define pin_hc_rx PA1
-
-#define pin_bt_tx PB8
-#define pin_bt_rx PB9
-
-#define pin_gps_tx PC14
-#define pin_gps_rx PC15
-
-#define pin_led0 PA4 //G
-#define pin_led1 PA5 //W
-#define pin_led2 PA6 //B
-#define pin_led3 PA8 //Y
-
-#define pin_vsen PA3
-#define pin_isen PA2
-
-#define dp_scl PB6
-#define dp_sda PB7
-
-#define pin_guide_ra1 PC0
-#define pin_guide_dec1 PC1
-#define pin_guide_dec2 PC2
-#define pin_guide_ra2 PC3
-
-#define pin_scl_oled PC10
-#define pin_sda_oled PC11
 
 #define firmware_version "0.2"
 #define hardware_version "2.0"
@@ -146,6 +99,7 @@
 
 /* Private variables ---------------------------------------------------------*/
 ADC_HandleTypeDef hadc1;
+ADC_HandleTypeDef hadc2;
 
 I2C_HandleTypeDef hi2c1;
 
@@ -154,6 +108,7 @@ RTC_HandleTypeDef hrtc;
 TIM_HandleTypeDef htim2;
 TIM_HandleTypeDef htim10;
 TIM_HandleTypeDef htim11;
+TIM_HandleTypeDef htim12;
 TIM_HandleTypeDef htim13;
 
 UART_HandleTypeDef huart4;
@@ -282,6 +237,8 @@ uint8_t ser_buf[ser_bufsize];
 int ser_pos;
 int32_t ser_last;
 
+int adc_mode;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -299,7 +256,9 @@ static void MX_RTC_Init(void);
 static void MX_TIM2_Init(void);
 static void MX_TIM10_Init(void);
 static void MX_TIM11_Init(void);
+static void MX_TIM12_Init(void);
 static void MX_TIM13_Init(void);
+static void MX_ADC2_Init(void);
 /* USER CODE BEGIN PFP */
 
 void led_set(int lednum, int ledstate);
@@ -326,6 +285,20 @@ RTC_DateTypeDef get_date_now();
 void set_time_now(RTC_TimeTypeDef time_now);
 void set_date_now(RTC_DateTypeDef date_now);
 void serial_process();
+void goto_target();
+void set_current(int axis, float current);
+void set_ustep(int axis, int step);
+void stop_motor(int axis);
+void start_motor(int axis);
+void reset_motor(int axis);
+void tim_ra_callback();
+void tim_dec_callback();
+void applydir();
+void input_sen();
+void tim_acc_callback();
+void set_ra_now(int64_t radelta);
+void set_dec_now(int64_t decdelta);
+void debug();
 
 /* USER CODE END PFP */
 
@@ -392,11 +365,11 @@ void hc_slew() {
 	}
 }
 
-void tim_guide_callback() {
-	GUIDE_STATE[0] = HAL_GPIO_ReadPin(GUIDE2_GPIO_Port, GUIDE2_Pin) == GPIO_PIN_RESET ? 1 : 0;
+void guide_callback() {
+	/*GUIDE_STATE[0] = HAL_GPIO_ReadPin(GUIDE2_GPIO_Port, GUIDE2_Pin) == GPIO_PIN_RESET ? 1 : 0;
 	GUIDE_STATE[1] = HAL_GPIO_ReadPin(GUIDE3_GPIO_Port, GUIDE3_Pin) == GPIO_PIN_RESET ? 1 : 0;
 	GUIDE_STATE[2] = HAL_GPIO_ReadPin(GUIDE1_GPIO_Port, GUIDE1_Pin) == GPIO_PIN_RESET ? 1 : 0;
-	GUIDE_STATE[3] = HAL_GPIO_ReadPin(GUIDE4_GPIO_Port, GUIDE4_Pin) == GPIO_PIN_RESET ? 1 : 0;
+	GUIDE_STATE[3] = HAL_GPIO_ReadPin(GUIDE4_GPIO_Port, GUIDE4_Pin) == GPIO_PIN_RESET ? 1 : 0;*/
 
 	if (GUIDE_STATE[0] == 1 && GUIDE_STATE[1] == 0) { //Up
 		guide_dec_now = guide_speed;
@@ -922,11 +895,307 @@ void serial_process() {
 		serial_decode();
 		ser_pos = 0;
 	}
-	if (ser_pos > ser_bufsize) {
+	if (ser_pos > ser_bufsize) { //Useless?
 		ser_pos = 0;
+	}
+} //TODO: check if it works
+
+void goto_target() {
+	float ra_togo = ra_pos_target - (ra_pos_now + ra_pos_diff);
+	float dec_togo = dec_pos_target - dec_pos_now; //TODO: meridian flip?
+	//TODO: goto
+
+	float ra_acc_time = 0, ra_acc_length_ustep = 0, ra_spd_calc = 0;
+	float dec_acc_time = 0, dec_acc_length_ustep = 0, dec_spd_calc = 0;
+
+	if ((state_ra_slew =! STATE_SLEW_WAIT) || (state_dec_slew != STATE_SLEW_WAIT)) {
+		//When any motor is busy
+		return;
+	}
+
+	//RA acc calculation
+	ra_spd_calc = ra_spd_now;
+	while(ra_spd_calc <= gotospeed_hc_ra) {
+		ra_acc_time += 1.0/tim_acc_freq;
+		ra_acc_length_ustep += ra_spd_calc;
+		ra_spd_calc += ra_acc / tim_acc_freq;
+	}
+
+	dec_spd_calc = dec_spd_now;
+	while(dec_spd_calc <= gotospeed_hc_dec) {
+		dec_acc_time += 1.0/tim_acc_freq;
+		dec_acc_length_ustep += dec_spd_calc;
+		dec_spd_calc += dec_acc / tim_acc_freq;
+	}
+
+	//TODO: real goto
+}
+
+//TODO: codes for motor driver
+//Code to control motor driving current
+void set_current(int axis, float current) {
+
+}
+
+//TODO: codes for motor driver
+void set_ustep(int axis, int step) {
+	if (axis == RA) {
+		ra_ustep_now = step;
+		if (step == ra_ustep_fast) {
+			state_ra_ustepmode = MODE_FAST;
+		} else if (step == ra_ustep_slow) {
+			state_ra_ustepmode = MODE_SLOW;
+		}
+	} else if (axis == DEC) {
+		dec_ustep_now = step;
+		if (step == dec_ustep_fast) {
+			state_dec_ustepmode = MODE_FAST;
+		} else if (step == dec_ustep_slow) {
+			state_dec_ustepmode = MODE_SLOW;
+		}
 	}
 }
 
+void stop_motor(int axis) {
+	if (axis == RA) {
+	} else if (axis == DEC) {
+	}
+}
+
+void start_motor(int axis) {
+	if (axis == RA) {
+	} else if (axis == DEC) {
+	}
+}
+
+void reset_motor(int axis) {
+	if (axis == RA) {
+	} else if (axis == DEC) {
+	}
+}
+//
+
+//motor indexing
+int tim_counter_ra, tim_counter_dec;
+int tim_pulse_ra, tim_pulse_dec;
+void tim_ra_callback() {
+	tim_counter_ra++;
+	tim_counter_ra_remainder++;
+
+	if (tim_counter_ra > ra_tick_per_step) { //will count more, therefore run slower than actual speed.
+		tim_counter_ra = 0;
+		tim_pulse_ra = 1 - tim_pulse_ra;
+		if (tim_pulse_ra == 1){
+			if (dir_ra_now == 1) {
+				set_ra_now(+(int64_t)tim_pulse_ra * (int64_t)ra_motor_ustep_max / (int64_t)ra_ustep_now);
+			} else {
+				set_ra_now(-(int64_t)tim_pulse_ra * (int64_t)ra_motor_ustep_max / (int64_t)ra_ustep_now);
+			}
+		}
+		//TODO: Pulse
+		//digitalWrite(pin_ra_step, tim_pulse_ra);
+	} else if (tim_counter_ra > tim_counter_ra_max) {
+		tim_counter_ra = 0;
+	}
+	if (tim_counter_ra_remainder > ra_timer_remainder) {
+		tim_counter_ra_remainder = 0;
+		tim_pulse_ra = 1 - tim_pulse_ra;
+		if (tim_pulse_ra == 1){
+			if (dir_ra_now == 1) {
+				set_ra_now(+(int64_t)tim_pulse_ra * (int64_t)ra_motor_ustep_max / (int64_t)ra_ustep_now);
+			} else {
+				set_ra_now(-(int64_t)tim_pulse_ra * (int64_t)ra_motor_ustep_max / (int64_t)ra_ustep_now);
+			}
+		}
+		//TODO: Pulse
+		//digitalWrite(pin_ra_step, tim_pulse_ra);
+	} else if (tim_counter_ra > tim_counter_ra_max) {
+		tim_counter_ra = 0;
+	}
+}
+
+void tim_dec_callback() {
+	tim_counter_dec++;
+	if (tim_counter_dec > dec_tick_per_step) {
+		tim_counter_dec = 0;
+		tim_pulse_dec = 1 - tim_pulse_dec;
+		if (tim_pulse_dec == 1){
+			if (dir_dec_now == 1) {
+				set_dec_now(+(int64_t)tim_pulse_dec * (int64_t)dec_motor_ustep_max / (int64_t)dec_ustep_now);
+			} else {
+				set_dec_now(-(int64_t)tim_pulse_dec * (int64_t)dec_motor_ustep_max / (int64_t)dec_ustep_now);
+			}
+		}
+		//TODO: pulse
+		//digitalWrite(pin_dec_step, tim_pulse_dec);
+	} else if (tim_counter_dec > tim_counter_dec_max) {
+		tim_counter_dec = 0;
+	}
+}
+
+void applydir() {
+	if (dir_ra_now != dir_ra_target) {
+		if (dir_ra_target == 0) {
+			if (DIRSET_RA == 0) {
+				HAL_GPIO_WritePin(DIR1_GPIO_Port, DIR1_Pin, GPIO_PIN_RESET);
+			} else {
+				HAL_GPIO_WritePin(DIR1_GPIO_Port, DIR1_Pin, GPIO_PIN_SET);
+			}
+		} else if (dir_ra_target == 1) {
+			if (DIRSET_RA == 0) {
+				HAL_GPIO_WritePin(DIR1_GPIO_Port, DIR1_Pin, GPIO_PIN_SET);
+			} else {
+				HAL_GPIO_WritePin(DIR1_GPIO_Port, DIR1_Pin, GPIO_PIN_RESET);
+			}
+		}
+		dir_ra_now = dir_ra_target;
+	}
+	if (dir_dec_now != dir_dec_target) {
+		if (dir_dec_target == 0) {
+			if (DIRSET_DEC == 0) {
+				HAL_GPIO_WritePin(DIR2_GPIO_Port, DIR2_Pin, GPIO_PIN_RESET);
+			} else {
+				HAL_GPIO_WritePin(DIR2_GPIO_Port, DIR2_Pin, GPIO_PIN_SET);
+			}
+		} else if (dir_dec_target == 1) {
+			if (DIRSET_DEC == 0) {
+				HAL_GPIO_WritePin(DIR2_GPIO_Port, DIR2_Pin, GPIO_PIN_SET);
+			} else {
+				HAL_GPIO_WritePin(DIR2_GPIO_Port, DIR2_Pin, GPIO_PIN_RESET);
+			}
+		}
+		dir_dec_now = dir_dec_target;
+	}
+}
+
+void tim_acc_callback() {
+	if (abs(ra_spd_now - ra_spd_target) < epsilon) {
+		//Do nothing
+		state_dyn_ra = STATE_DYN_UNIFRM;
+	} else {
+		float ra_targetspeed = ra_spd_target + guide_ra_now;
+		if (ra_spd_now < ra_targetspeed) {
+			ra_spd_now += ra_acc / tim_acc_freq;
+			if (ra_spd_now > ra_targetspeed) { //finished changing speed
+				ra_spd_now = ra_targetspeed;
+				if (state_ra_slew == STATE_SLEW_HC_STOPPING) state_ra_slew = STATE_SLEW_WAIT;
+			}
+		} else if (ra_spd_now > ra_targetspeed) {
+			ra_spd_now -= ra_dacc / tim_acc_freq;
+			if (ra_spd_now < ra_targetspeed) { //finished changing speed
+				ra_spd_now = ra_targetspeed;
+				if (state_ra_slew == STATE_SLEW_HC_STOPPING) state_ra_slew = STATE_SLEW_WAIT;
+			}
+		}
+		if (abs(ra_spd_now) > ra_fast_crit_ustep && state_ra_ustepmode == MODE_SLOW) {
+			//if(ra_pos_now % (ra_motor_ustep_max / ra_ustep_fast) == 0)
+				set_ustep(RA, ra_ustep_fast);
+		} else if (abs(ra_spd_now) < ra_fast_crit_ustep && state_ra_ustepmode == MODE_FAST) {
+			set_ustep(RA, ra_ustep_slow);
+		}
+		if (abs(ra_spd_now) > ra_fast_crit_current && state_ra_currentmode == MODE_SLOW) {
+			set_current(RA, ra_current_fast);
+		} else if (abs(ra_spd_now) < ra_fast_crit_current && state_ra_currentmode == MODE_FAST) {
+			set_current(RA, ra_current_slow);
+		}
+		ra_tick_per_step = tim_ra_freq / (ra_spd_ratio_sdrl * abs(ra_spd_now) * ra_ustep_now / ra_motor_ustep_max + epsilon) / 2; //divide by 2 for pulse
+
+		float ra_tps_ceil = ceil(ra_tick_per_step);
+		float ra_tps_error = ra_tps_ceil - ra_tick_per_step;
+		ra_timer_remainder = 1 / (ra_tps_error / ra_tick_per_step + epsilon) * ra_tps_ceil / 2;
+
+		if (ra_spd_now < 0) {
+			dir_ra_target = 0;
+		} else {
+			dir_ra_target = 1;
+		}
+		if (dir_ra_now != dir_ra_target) {
+			applydir();
+		}
+	}
+	ra_pos_diff += ((-1.0)/tim_acc_freq) * ra_spd_ratio_sdrl;
+
+	if (abs(dec_spd_now - dec_spd_target) < epsilon) {
+		//Do nothing
+		state_dyn_dec = STATE_DYN_UNIFRM;
+	} else {
+		float dec_targetspeed = dec_spd_target + guide_dec_now;
+		if (dec_spd_now < dec_targetspeed) {
+			dec_spd_now += dec_acc / tim_acc_freq;
+			if (dec_spd_now > dec_targetspeed) { //finished changing speed
+				dec_spd_now = dec_targetspeed;
+				if (state_dec_slew == STATE_SLEW_HC_STOPPING) state_dec_slew = STATE_SLEW_WAIT;
+			}
+		} else if (dec_spd_now > dec_targetspeed) {
+			dec_spd_now -= dec_dacc / tim_acc_freq;
+			if (dec_spd_now < dec_targetspeed) { //finished changing speed
+				dec_spd_now = dec_targetspeed;
+				if (state_dec_slew == STATE_SLEW_HC_STOPPING) state_dec_slew = STATE_SLEW_WAIT;
+			}
+		}
+		if (abs(dec_spd_now) > dec_fast_crit_ustep && state_dec_ustepmode == MODE_SLOW) {
+			//if(dec_pos_now % (dec_motor_ustep_max / dec_ustep_fast) == 0)
+				set_ustep(DEC, ra_ustep_fast);
+		} else if (abs(dec_spd_now) < dec_fast_crit_ustep && state_dec_ustepmode == MODE_FAST) {
+			set_ustep(DEC, ra_ustep_slow);
+		}
+		if (abs(dec_spd_now) > dec_fast_crit_current && state_dec_currentmode == MODE_SLOW) {
+			set_current(DEC, dec_current_fast);
+		} else if (abs(dec_spd_now) < dec_fast_crit_current && state_dec_currentmode == MODE_FAST) {
+			set_current(DEC, dec_current_slow);
+		}
+		dec_tick_per_step = tim_dec_freq / (dec_spd_ratio_sdrl * abs(dec_spd_now) * dec_ustep_now / dec_motor_ustep_max + epsilon) / 2; //divide by 2 for pulse
+
+		if (dec_spd_now < 0) {
+			dir_dec_target = 0;
+		} else {
+			dir_dec_target = 1;
+		}
+		if (dir_dec_now != dir_dec_target) {
+			applydir();
+		}
+	}
+}
+
+//RA, DEC setup
+void set_ra_now(int64_t radelta) {
+	ra_pos_now += radelta;
+	if (ra_pos_now > ra_ustep_per_rev) {
+		ra_pos_now -= ra_ustep_per_rev;
+	} else if (ra_pos_now < 0) {
+		ra_pos_now += ra_ustep_per_rev;
+	}
+}
+
+void set_dec_now(int64_t decdelta) {
+	dec_pos_now += decdelta;
+	if (dec_pos_now > dec_ustep_per_rev) {
+		dec_pos_now -= dec_ustep_per_rev;
+	} else if (dec_pos_now < 0) {
+		dec_pos_now += dec_ustep_per_rev;
+	}
+}
+
+void debug() {
+	if (adc_mode == 0) {
+		HAL_ADC_Start_IT(&hadc1);
+		adc_mode = 1;
+	} else {
+		HAL_ADC_Start_IT(&hadc2);
+		adc_mode = 0;
+	}
+}
+
+void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {
+	int adc_tmp;
+	if (adc_mode == 0) {
+		adc_tmp = HAL_ADC_GetValue(hadc);
+		vin = (float)adc_tmp * 7.05 / 4096.0 * 1000.0;
+	} else {
+		adc_tmp = HAL_ADC_GetValue(hadc);
+		iin = (float)adc_tmp / 16384.0 / 15.0 * 20.0 * 1000.0;
+	}
+}
 /* USER CODE END 0 */
 
 /**
@@ -969,7 +1238,9 @@ int main(void)
   MX_TIM2_Init();
   MX_TIM10_Init();
   MX_TIM11_Init();
+  MX_TIM12_Init();
   MX_TIM13_Init();
+  MX_ADC2_Init();
   /* USER CODE BEGIN 2 */
 
   gotospeed_table[0] = 0.5;
@@ -982,6 +1253,7 @@ int main(void)
 
   ra_tick_per_step = tim_counter_ra_max;
   dec_tick_per_step = tim_counter_dec_max;
+
 
   /* USER CODE END 2 */
 
@@ -1083,9 +1355,9 @@ static void MX_ADC1_Init(void)
   }
   /** Configure for the selected ADC regular channel its corresponding rank in the sequencer and its sample time.
   */
-  sConfig.Channel = ADC_CHANNEL_9;
+  sConfig.Channel = ADC_CHANNEL_8;
   sConfig.Rank = 1;
-  sConfig.SamplingTime = ADC_SAMPLETIME_3CYCLES;
+  sConfig.SamplingTime = ADC_SAMPLETIME_15CYCLES;
   if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
   {
     Error_Handler();
@@ -1093,6 +1365,56 @@ static void MX_ADC1_Init(void)
   /* USER CODE BEGIN ADC1_Init 2 */
 
   /* USER CODE END ADC1_Init 2 */
+
+}
+
+/**
+  * @brief ADC2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_ADC2_Init(void)
+{
+
+  /* USER CODE BEGIN ADC2_Init 0 */
+
+  /* USER CODE END ADC2_Init 0 */
+
+  ADC_ChannelConfTypeDef sConfig = {0};
+
+  /* USER CODE BEGIN ADC2_Init 1 */
+
+  /* USER CODE END ADC2_Init 1 */
+  /** Configure the global features of the ADC (Clock, Resolution, Data Alignment and number of conversion)
+  */
+  hadc2.Instance = ADC2;
+  hadc2.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV4;
+  hadc2.Init.Resolution = ADC_RESOLUTION_12B;
+  hadc2.Init.ScanConvMode = DISABLE;
+  hadc2.Init.ContinuousConvMode = DISABLE;
+  hadc2.Init.DiscontinuousConvMode = DISABLE;
+  hadc2.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
+  hadc2.Init.ExternalTrigConv = ADC_SOFTWARE_START;
+  hadc2.Init.DataAlign = ADC_DATAALIGN_RIGHT;
+  hadc2.Init.NbrOfConversion = 1;
+  hadc2.Init.DMAContinuousRequests = DISABLE;
+  hadc2.Init.EOCSelection = ADC_EOC_SINGLE_CONV;
+  if (HAL_ADC_Init(&hadc2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /** Configure for the selected ADC regular channel its corresponding rank in the sequencer and its sample time.
+  */
+  sConfig.Channel = ADC_CHANNEL_9;
+  sConfig.Rank = 1;
+  sConfig.SamplingTime = ADC_SAMPLETIME_3CYCLES;
+  if (HAL_ADC_ConfigChannel(&hadc2, &sConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN ADC2_Init 2 */
+
+  /* USER CODE END ADC2_Init 2 */
 
 }
 
@@ -1332,6 +1654,44 @@ static void MX_TIM11_Init(void)
 }
 
 /**
+  * @brief TIM12 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM12_Init(void)
+{
+
+  /* USER CODE BEGIN TIM12_Init 0 */
+
+  /* USER CODE END TIM12_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+
+  /* USER CODE BEGIN TIM12_Init 1 */
+
+  /* USER CODE END TIM12_Init 1 */
+  htim12.Instance = TIM12;
+  htim12.Init.Prescaler = 84;
+  htim12.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim12.Init.Period = 10000;
+  htim12.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim12.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim12) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim12, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM12_Init 2 */
+
+  /* USER CODE END TIM12_Init 2 */
+
+}
+
+/**
   * @brief TIM13 Initialization Function
   * @param None
   * @retval None
@@ -1343,30 +1703,16 @@ static void MX_TIM13_Init(void)
 
   /* USER CODE END TIM13_Init 0 */
 
-  TIM_OC_InitTypeDef sConfigOC = {0};
-
   /* USER CODE BEGIN TIM13_Init 1 */
 
   /* USER CODE END TIM13_Init 1 */
   htim13.Instance = TIM13;
-  htim13.Init.Prescaler = 16800;
+  htim13.Init.Prescaler = 8400;
   htim13.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim13.Init.Period = 100;
+  htim13.Init.Period = 10000;
   htim13.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-  htim13.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
+  htim13.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim13) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  if (HAL_TIM_OC_Init(&htim13) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  sConfigOC.OCMode = TIM_OCMODE_TIMING;
-  sConfigOC.Pulse = 0;
-  sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
-  sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
-  if (HAL_TIM_OC_ConfigChannel(&htim13, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
   {
     Error_Handler();
   }
@@ -1607,11 +1953,9 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(ESP_PROG_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : GUIDE1_Pin GUIDE2_Pin GUIDE3_Pin GUIDE4_Pin
-                           DIAG2_Pin */
-  GPIO_InitStruct.Pin = GUIDE1_Pin|GUIDE2_Pin|GUIDE3_Pin|GUIDE4_Pin
-                          |DIAG2_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  /*Configure GPIO pins : GUIDE1_Pin GUIDE2_Pin GUIDE3_Pin GUIDE4_Pin */
+  GPIO_InitStruct.Pin = GUIDE1_Pin|GUIDE2_Pin|GUIDE3_Pin|GUIDE4_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING_FALLING;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
@@ -1627,6 +1971,12 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : DIAG2_Pin */
+  GPIO_InitStruct.Pin = DIAG2_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(DIAG2_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pins : NENBL2_Pin STEP1_Pin DIR1_Pin */
   GPIO_InitStruct.Pin = NENBL2_Pin|STEP1_Pin|DIR1_Pin;
@@ -1644,9 +1994,23 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
+  /* EXTI interrupt init*/
+  HAL_NVIC_SetPriority(EXTI0_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(EXTI0_IRQn);
+
+  HAL_NVIC_SetPriority(EXTI1_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(EXTI1_IRQn);
+
+  HAL_NVIC_SetPriority(EXTI2_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(EXTI2_IRQn);
+
+  HAL_NVIC_SetPriority(EXTI3_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(EXTI3_IRQn);
+
 }
 
 /* USER CODE BEGIN 4 */
+
 
 /* USER CODE END 4 */
 

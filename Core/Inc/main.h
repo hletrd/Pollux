@@ -42,6 +42,8 @@ extern "C" {
 extern uint8_t ser_buf[ser_bufsize];
 extern int ser_pos;
 extern int32_t ser_last;
+extern int GUIDE_STATE[4];
+extern float vin, iin;
 
 /* USER CODE END ET */
 
@@ -62,8 +64,12 @@ void Error_Handler(void);
 
 /* USER CODE BEGIN EFP */
 
-extern void tim_guide_callback();
+extern void guide_callback();
 extern void serial_process();
+extern void tim_ra_callback();
+extern void tim_dec_callback();
+extern void tim_acc_callback();
+extern void debug();
 
 /* USER CODE END EFP */
 
@@ -72,12 +78,16 @@ extern void serial_process();
 #define ESP_PROG_GPIO_Port GPIOC
 #define GUIDE1_Pin GPIO_PIN_0
 #define GUIDE1_GPIO_Port GPIOC
+#define GUIDE1_EXTI_IRQn EXTI0_IRQn
 #define GUIDE2_Pin GPIO_PIN_1
 #define GUIDE2_GPIO_Port GPIOC
+#define GUIDE2_EXTI_IRQn EXTI1_IRQn
 #define GUIDE3_Pin GPIO_PIN_2
 #define GUIDE3_GPIO_Port GPIOC
+#define GUIDE3_EXTI_IRQn EXTI2_IRQn
 #define GUIDE4_Pin GPIO_PIN_3
 #define GUIDE4_GPIO_Port GPIOC
+#define GUIDE4_EXTI_IRQn EXTI3_IRQn
 #define MUART2_TX_Pin GPIO_PIN_0
 #define MUART2_TX_GPIO_Port GPIOA
 #define MUART2_Pin GPIO_PIN_1
