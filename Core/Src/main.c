@@ -135,7 +135,7 @@
 #define STATE_DYN_UNIFRM 2
 #define STATE_DYN_DACC 3
 
-#define ser_bufsize 100
+
 
 /* USER CODE END PD */
 
@@ -214,9 +214,9 @@ float gotospeed_hc_dec;
 //2020-11-18 22:00:00
 uint32_t time_offset_local = 32400;
 
-volatile int64_t ra_pos_now, dec_pos_now; //RA, DEC pos of moving mount.
-volatile int64_t ra_pos_target, dec_pos_target;
-volatile int64_t ra_pos_offset, dec_pos_offset;
+int64_t ra_pos_now, dec_pos_now; //RA, DEC pos of moving mount.
+int64_t ra_pos_target, dec_pos_target;
+int64_t ra_pos_offset, dec_pos_offset;
 
 //absolute RA of target object (tracking compensation)
 double ra_pos_diff;
@@ -241,7 +241,7 @@ float tim_acc_freq;
 float tim_goto_freq;
 
 int dir_ra_target = 1, dir_dec_target = 1;
-volatile int dir_ra_now = 1, dir_dec_now = 1;
+int dir_ra_now = 1, dir_dec_now = 1;
 
 float ra_current_fast = 0.4, ra_current_slow = 0.03;
 float dec_current_fast = 0.4, dec_current_slow = 0.03;
@@ -251,10 +251,10 @@ int state_dec_currentmode = MODE_SLOW;
 int state_ra_ustepmode = MODE_SLOW;
 int state_dec_ustepmode = MODE_SLOW;
 
-volatile float ra_spd_now = 0;
-volatile float dec_spd_now = 0;
-volatile float ra_spd_target = 0;
-volatile float dec_spd_target = 0;
+float ra_spd_now = 0;
+float dec_spd_now = 0;
+float ra_spd_target = 0;
+float dec_spd_target = 0;
 
 int state_ra = STATE_STOP;
 int state_dec = STATE_STOP;
@@ -278,7 +278,7 @@ float vin, iin;
 
 float site_lon, site_lat;
 
-char ser_buf[ser_bufsize];
+uint8_t ser_buf[ser_bufsize];
 int ser_pos;
 int32_t ser_last;
 
@@ -317,7 +317,7 @@ void set_ra_second_target(int32_t ra_second);
 void set_dec_second(int32_t dec_second);
 void set_dec_second_target(int32_t dec_second);
 void sync();
-int atoi_2(char* input) ;
+int atoi_2(uint8_t* input) ;
 void goto_slew();
 void serial_decode();
 void uart_print(uint8_t* output);
@@ -325,6 +325,7 @@ RTC_TimeTypeDef get_time_now();
 RTC_DateTypeDef get_date_now();
 void set_time_now(RTC_TimeTypeDef time_now);
 void set_date_now(RTC_DateTypeDef date_now);
+void serial_process();
 
 /* USER CODE END PFP */
 
@@ -473,7 +474,7 @@ int64_t convert_dec_to_ustep(float dec_second) {
 }
 
 void set_ra_second(int32_t ra_second) { //overwrite current setttings (SYNC)
-	float ra_second_ratio = 24*60*60;
+	//float ra_second_ratio = 24*60*60;
 	ra_pos_diff = (double)(ra_pos_target - ra_pos_now);
 }
 
@@ -515,7 +516,7 @@ void sync() {
 	dec_pos_offset = (dec_pos_now - dec_pos_target) % dec_ustep_per_rev;
 }
 
-int atoi_2(char* input) {
+int atoi_2(uint8_t* input) {
 	int result;
 	if (input[0] >= 48 && input[0] < 58 && input[1] >= 48 && input[1] < 58) {
 		result = (input[0] - 48) * 10 + (input[1] - 48);
@@ -532,6 +533,8 @@ void goto_slew() {
 void serial_decode() {
 	uint8_t output[100];
 	int32_t tmp;
+	RTC_TimeTypeDef rtctime;
+	RTC_DateTypeDef rtcdate;
 	if (ser_pos >= 2 && ser_buf[0] == ':' && ser_buf[ser_pos-1] == '#') {
 		switch (ser_buf[1]) {
 			case 'A': //Alignment commands
@@ -563,11 +566,13 @@ void serial_decode() {
 				if (ser_pos < 4) break;
 				switch (ser_buf[2]) {
 					case 'a': //returns current local time in 12 hour format
-						sprintf(output, "%02ld:%02ld:%02ld#", hour()%12, minute(), second());
+						rtctime = get_time_now();
+						sprintf(output, "%02d:%02d:%02d#", rtctime.Hours%12, rtctime.Minutes, rtctime.Seconds);
 						uart_print(output);
 						break;
 					case 'C': //returns current date
-						sprintf(output, "%02ld/%02ld/%02ld#", month(), day(), year()%100);
+						rtcdate = get_date_now();
+						sprintf(output, "%02d/%02d/%02d#", rtcdate.Month, rtcdate.Date, rtcdate.Year%100);
 						uart_print(output);
 						break;
 					case 'D': //returns current declination
@@ -600,7 +605,8 @@ void serial_decode() {
 						uart_print(output);
 						break;
 					case 'L': //returns current local time in 24 hour format
-						sprintf(output, "%02ld:%02ld:%02ld#", hour(), minute(), second());
+						rtctime = get_time_now();
+						sprintf(output, "%02d:%02d:%02d#", rtctime.Hours, rtctime.Minutes, rtctime.Seconds);
 						uart_print(output);
 						break;
 					case 'R': //returns current RA position
@@ -637,7 +643,7 @@ void serial_decode() {
 								uart_print(firmware_time);
 								break;
 						}
-						uart_print('#');
+						uart_print("#");
 						break;
 				}
 				break;
@@ -792,8 +798,9 @@ void serial_decode() {
 							hour += (ser_buf[4] - 48) * 100;
 							hour += (ser_buf[5] - 48) * 10;
 							hour += (ser_buf[7] - 48);
+							hour *= sign;
 
-							tm time_tmp;
+							struct tm time_tmp;
 							RTC_TimeTypeDef timenow;
 							RTC_DateTypeDef datenow;
 							timenow = get_time_now();
@@ -805,16 +812,16 @@ void serial_decode() {
 							time_tmp.tm_hour = timenow.Hours;
 							time_tmp.tm_min = timenow.Minutes;
 							time_tmp.tm_sec = timenow.Seconds;
-							time_t time_t_tmp = mktime(time_tmp);
+							time_t time_t_tmp = mktime(&time_tmp);
 							time_t_tmp -= time_offset_local;
 							time_offset_local = hour * 3600 / 10;
 							time_t_tmp += time_offset_local;
 
-							tm time_new;
+							struct tm time_new;
 							RTC_TimeTypeDef timenow_new;
 							RTC_DateTypeDef datenow_new;
 
-							time_new = gmtime(time_t_tmp);
+							time_new = *gmtime(&time_t_tmp);
 							timenow_new.Hours = time_new.tm_hour;
 							timenow_new.Minutes = time_new.tm_min;
 							timenow_new.Seconds = time_new.tm_sec;
@@ -822,8 +829,8 @@ void serial_decode() {
 							datenow_new.Month = time_new.tm_mon+1;
 							datenow_new.Date = time_new.tm_mday;
 							datenow_new.WeekDay = time_new.tm_wday;
-							set_time_now(time_new);
-							set_date_now(date_new);
+							set_time_now(timenow_new);
+							set_date_now(datenow_new);
 							uart_print("1");
 						} else {
 							uart_print("0");
@@ -832,7 +839,6 @@ void serial_decode() {
 					case 'L': //Set local time
 						if (ser_pos == 12) {
 							int32_t hh, mm, ss;
-							int32_t time_second;
 							hh = atoi_2(ser_buf+3);
 							mm = atoi_2(ser_buf+6);
 							ss = atoi_2(ser_buf+9);
@@ -906,29 +912,17 @@ void set_time_now(RTC_TimeTypeDef time_now) {
 }
 
 void set_date_now(RTC_DateTypeDef date_now) {
-	HAL_RTC_SetDate(&hrtc, &time_now, RTC_FORMAT_BIN);
+	HAL_RTC_SetDate(&hrtc, &date_now, RTC_FORMAT_BIN);
 }
 
 void serial_process() {
-	while (Serial.available() > 0) {
-		ser_buf[ser_pos] = Serial.read();
-		ser_pos++;
-		ser_last = millis();
-		if (ser_buf[0] != ':') {
-			ser_pos = 0;
-		} else if (ser_buf[ser_pos-1] == '#') {
-			serial_decode();
-			ser_pos = 0;
-		}
-		if (ser_pos > ser_bufsize) {
-			ser_pos = 0;
-		}
+	if (ser_buf[0] != ':') {
+		ser_pos = 0;
+	} else if (ser_buf[ser_pos-1] == '#') {
+		serial_decode();
+		ser_pos = 0;
 	}
-}
-
-void serial_clear() {
-	if (millis() - ser_last > 100) {
-		while (Serial.available() > 0) Serial.read();
+	if (ser_pos > ser_bufsize) {
 		ser_pos = 0;
 	}
 }

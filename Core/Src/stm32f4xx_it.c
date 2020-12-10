@@ -245,7 +245,8 @@ void USART1_IRQHandler(void)
   /* USER CODE END USART1_IRQn 0 */
   HAL_UART_IRQHandler(&huart1);
   /* USER CODE BEGIN USART1_IRQn 1 */
-
+  HAL_UART_Receive_IT(&huart1, ser_buf+ser_pos, 1);
+  ser_pos = (ser_pos+1) % ser_bufsize;
   /* USER CODE END USART1_IRQn 1 */
 }
 

@@ -38,6 +38,11 @@ extern "C" {
 /* Exported types ------------------------------------------------------------*/
 /* USER CODE BEGIN ET */
 
+#define ser_bufsize 100
+extern uint8_t ser_buf[ser_bufsize];
+extern int ser_pos;
+extern int32_t ser_last;
+
 /* USER CODE END ET */
 
 /* Exported constants --------------------------------------------------------*/
@@ -58,6 +63,7 @@ void Error_Handler(void);
 /* USER CODE BEGIN EFP */
 
 extern void tim_guide_callback();
+extern void serial_process();
 
 /* USER CODE END EFP */
 
