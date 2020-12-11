@@ -238,6 +238,7 @@ int ser_pos;
 int32_t ser_last;
 
 int adc_mode;
+int dbg_counter;
 
 /* USER CODE END PV */
 
@@ -280,6 +281,9 @@ int atoi_2(uint8_t* input) ;
 void goto_slew();
 void serial_decode();
 void uart_print(uint8_t* output);
+void uart_printi(int output);
+void uart_printf(float output);
+void uart_printlli(int64_t output);
 RTC_TimeTypeDef get_time_now();
 RTC_DateTypeDef get_date_now();
 void set_time_now(RTC_TimeTypeDef time_now);
@@ -866,6 +870,24 @@ void uart_print(uint8_t* output) {
 	HAL_UART_Transmit(&huart1, output, sizeof(output), HAL_MAX_DELAY);
 }
 
+void uart_printi(int output) {
+	uint8_t uart_buf[30];
+	sprintf(uart_buf, "%d", output);
+	uart_print(uart_buf);
+}
+
+void uart_printf(float output) {
+	uint8_t uart_buf[30];
+	sprintf(uart_buf, "%lf", output);
+	uart_print(uart_buf);
+}
+
+void uart_printlli(int64_t output) {
+	uint8_t uart_buf[30];
+	sprintf(uart_buf, "%lld", output);
+	uart_print(uart_buf);
+}
+
 RTC_TimeTypeDef get_time_now() {
 	RTC_TimeTypeDef tmp;
 	HAL_RTC_GetTime(&hrtc, &tmp, RTC_FORMAT_BIN);
@@ -1184,7 +1206,115 @@ void debug() {
 		HAL_ADC_Start_IT(&hadc2);
 		adc_mode = 0;
 	}
+
+	if (debugmode == 1) {
+		dbg_counter++;
+		int tmp;
+		uint8_t output[100];
+
+		uart_print("Counter: ");
+		uart_printi(dbg_counter);
+		uart_print("\n");
+
+		uart_print("RA speed now: ");
+		uart_printf(ra_spd_now);
+		uart_print("\n");
+		uart_print("RA speed target: ");
+		uart_printf(ra_spd_target);
+		uart_print("\n");
+		uart_print("RA ustep now: ");
+		uart_printi(ra_ustep_now);
+		uart_print("\n");
+		uart_print("RA tick per step now: ");
+		uart_printf(ra_tick_per_step);
+		uart_print("\n");
+		uart_print("RA tick remainder: ");
+		uart_printi(ra_timer_remainder);
+		uart_print("\n");
+		uart_print("RA pos now(motor): ");
+		uart_printlli(ra_pos_now);
+		uart_print("\n");
+		uart_print("RA pos pointing: ");
+		uart_printf(get_ra_second()*ra_spd_ratio_solar);
+		uart_print("\n");
+		uart_print("RA motor current now(A): ");
+		uart_printf(ra_drivecurrent_now);
+		uart_print("\n");
+		uart_print("RA dir now: ");
+		uart_printi(dir_ra_now);
+		uart_print("\n");
+		uart_print("RA sidereal ratio: ");
+		uart_printf(ra_spd_ratio_sdrl);
+		uart_print("\n");
+		uart_print("RA offset now: ");
+		uart_printlli(ra_pos_offset);
+		uart_print("\n");
+		uart_print("RA diff: ");
+		uart_printf(ra_pos_diff);
+		uart_print("\n");
+		tmp = get_ra_second();
+		sprintf(output, "%02d %02d %02d", tmp / 3600, tmp / 60 % 60, tmp % 60);
+		uart_print(output);
+		uart_print("\n");
+
+		uart_print("DEC speed now: ");
+		uart_printf(dec_spd_now);
+		uart_print("\n");
+		uart_print("DEC speed target: ");
+		uart_printf(dec_spd_target);
+		uart_print("\n");
+		uart_print("DEC ustep now: ");
+		uart_printi(dec_ustep_now);
+		uart_print("\n");
+		uart_print("DEC tick per step now: ");
+		uart_printf(dec_tick_per_step);
+		uart_print("\n");
+		uart_print("DEC pos now: ");
+		uart_printlli(dec_pos_now);
+		uart_print("\n");
+		uart_print("DEC motor current now(A): ");
+		uart_printf(dec_drivecurrent_now);
+		uart_print("\n");
+		uart_print("DEC dir now: ");
+		uart_printi(dir_dec_now);
+		uart_print("\n");
+		uart_print("DEC offset now: ");
+		uart_printlli(dec_pos_offset);
+		uart_print("\n");
+		tmp = get_dec_second();
+		if (tmp > 0)
+			sprintf(output, "%c%02d %02d %02d", '+', tmp/3600, tmp/60%60, tmp%60);
+		else
+			sprintf(output, "%c%02d %02d %02d", '-', -tmp/3600, -tmp/60%60, -tmp%60);
+		uart_print(output);
+		uart_print("\n");
+
+		uart_print("Guide state ");
+		uart_printi(GUIDE_STATE[0]);
+		uart_printi(GUIDE_STATE[1]);
+		uart_printi(GUIDE_STATE[2]);
+		uart_printi(GUIDE_STATE[3]);
+		uart_print("\n");
+
+		uart_print("HC state ");
+		uart_printi(HC_STATE[0]);
+		uart_printi(HC_STATE[1]);
+		uart_printi(HC_STATE[2]);
+		uart_printi(HC_STATE[3]);
+		uart_print("\n");
+
+		uart_print("Input V(mV): ");
+		uart_printf(vin);
+		uart_print("Input I(mA): ");
+		uart_printf(iin);
+		uart_print("\n");
+
+		uart_print("\n\n");
+
+		dbg_counter++;
+	}
 }
+
 
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {
 	int adc_tmp;
