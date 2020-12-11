@@ -221,9 +221,9 @@ void EXTI0_IRQHandler(void)
   HAL_GPIO_EXTI_IRQHandler(GPIO_PIN_0);
   /* USER CODE BEGIN EXTI0_IRQn 1 */
 	if (__HAL_GPIO_EXTI_GET_IT(GPIO_PIN_0) == SET) {
-		GUIDE_STATE[2] = 1;
-	} else {
 		GUIDE_STATE[2] = 0;
+	} else {
+		GUIDE_STATE[2] = 1;
 	}
 	__HAL_GPIO_EXTI_CLEAR_IT(GPIO_PIN_0);
   /* USER CODE END EXTI0_IRQn 1 */
@@ -240,9 +240,9 @@ void EXTI1_IRQHandler(void)
   HAL_GPIO_EXTI_IRQHandler(GPIO_PIN_1);
   /* USER CODE BEGIN EXTI1_IRQn 1 */
 	if (__HAL_GPIO_EXTI_GET_IT(GPIO_PIN_1) == SET) {
-		GUIDE_STATE[0] = 1;
-	} else {
 		GUIDE_STATE[0] = 0;
+	} else {
+		GUIDE_STATE[0] = 1;
 	}
 	__HAL_GPIO_EXTI_CLEAR_IT(GPIO_PIN_1);
   /* USER CODE END EXTI1_IRQn 1 */
@@ -259,9 +259,9 @@ void EXTI2_IRQHandler(void)
   HAL_GPIO_EXTI_IRQHandler(GPIO_PIN_2);
   /* USER CODE BEGIN EXTI2_IRQn 1 */
 	if (__HAL_GPIO_EXTI_GET_IT(GPIO_PIN_2) == SET) {
-		GUIDE_STATE[1] = 1;
-	} else {
 		GUIDE_STATE[1] = 0;
+	} else {
+		GUIDE_STATE[1] = 1;
 	}
 	__HAL_GPIO_EXTI_CLEAR_IT(GPIO_PIN_2);
   /* USER CODE END EXTI2_IRQn 1 */
@@ -278,9 +278,9 @@ void EXTI3_IRQHandler(void)
   HAL_GPIO_EXTI_IRQHandler(GPIO_PIN_3);
   /* USER CODE BEGIN EXTI3_IRQn 1 */
 	if (__HAL_GPIO_EXTI_GET_IT(GPIO_PIN_3) == SET) {
-		GUIDE_STATE[3] = 1;
-	} else {
 		GUIDE_STATE[3] = 0;
+	} else {
+		GUIDE_STATE[3] = 1;
 	}
 	__HAL_GPIO_EXTI_CLEAR_IT(GPIO_PIN_3);
   /* USER CODE END EXTI3_IRQn 1 */

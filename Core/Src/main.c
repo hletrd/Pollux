@@ -1384,6 +1384,59 @@ int main(void)
   ra_tick_per_step = tim_counter_ra_max;
   dec_tick_per_step = tim_counter_dec_max;
 
+  led_set(0, 1);
+  led_set(1, 1);
+  led_set(2, 1);
+  led_set(3, 1);
+
+
+  //calculate some vars
+  ra_ustep_per_rev = (int64_t) ((float) ra_motor_step * ra_motor_reducer * ra_final_reducer * ra_motor_ustep_max);
+  dec_ustep_per_rev = (int64_t) ((float) dec_motor_step * dec_motor_reducer * dec_final_reducer * dec_motor_ustep_max);
+
+  ra_spd_ratio_sdrl = ra_ustep_per_rev / sdrl_day;
+  ra_spd_ratio_solar = ra_ustep_per_rev / solar_day;
+  dec_spd_ratio_sdrl = dec_ustep_per_rev / sdrl_day;
+
+  if (debugmode == 1) {
+  	uart_print("Carina EQDriver startup\n");
+  	uart_print("RA step per rev: ");
+  	uart_printlli(ra_ustep_per_rev);
+  	uart_print("\n");
+  	uart_print("DEC step per rev: ");
+  	uart_printlli(dec_ustep_per_rev);
+  	uart_print("\n");
+  	uart_print("RA step per sec for sidereal: ");
+  	uart_printf(ra_spd_ratio_sdrl);
+  	uart_print("\n");
+  	uart_print("DEC step per sec for sidereal: ");
+  	uart_printf(dec_spd_ratio_sdrl);
+  	uart_print("\n");
+  	uart_print("\n");
+  }
+
+  //initialize
+
+  //setup 1x sidereal tracking mode for ra
+  ra_pos_now = 0;
+  ra_spd_target = 1;
+  ra_spd_now = 0;
+  dir_ra_target = 1;
+  dir_ra_now = 1;
+  state_ra = STATE_TRACK;
+  state_dyn_ra = STATE_DYN_ACC;
+
+  //stop for dec
+  dec_pos_now = 0;
+  dec_spd_target = 0;
+  dec_spd_now = 0;
+  dir_dec_target = 1;
+  dir_dec_now = 1;
+  state_dec = STATE_STOP;
+
+  //initial setup: slow mode
+  set_ustep(RA, ra_ustep_slow);
+  set_ustep(DEC, dec_ustep_slow);
 
   /* USER CODE END 2 */
 
