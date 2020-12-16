@@ -59,11 +59,11 @@
 
 /* External variables --------------------------------------------------------*/
 extern ADC_HandleTypeDef hadc1;
-extern ADC_HandleTypeDef hadc2;
 extern TIM_HandleTypeDef htim10;
 extern TIM_HandleTypeDef htim11;
 extern TIM_HandleTypeDef htim12;
 extern TIM_HandleTypeDef htim13;
+extern TIM_HandleTypeDef htim14;
 extern UART_HandleTypeDef huart4;
 extern UART_HandleTypeDef huart5;
 extern UART_HandleTypeDef huart1;
@@ -295,7 +295,6 @@ void ADC_IRQHandler(void)
 
   /* USER CODE END ADC_IRQn 0 */
   HAL_ADC_IRQHandler(&hadc1);
-  HAL_ADC_IRQHandler(&hadc2);
   /* USER CODE BEGIN ADC_IRQn 1 */
 
   /* USER CODE END ADC_IRQn 1 */
@@ -311,7 +310,7 @@ void TIM1_UP_TIM10_IRQHandler(void)
   /* USER CODE END TIM1_UP_TIM10_IRQn 0 */
   HAL_TIM_IRQHandler(&htim10);
   /* USER CODE BEGIN TIM1_UP_TIM10_IRQn 1 */
-  tim_ra_callback();
+  //tim_ra_callback();
   /* USER CODE END TIM1_UP_TIM10_IRQn 1 */
 }
 
@@ -325,7 +324,7 @@ void TIM1_TRG_COM_TIM11_IRQHandler(void)
   /* USER CODE END TIM1_TRG_COM_TIM11_IRQn 0 */
   HAL_TIM_IRQHandler(&htim11);
   /* USER CODE BEGIN TIM1_TRG_COM_TIM11_IRQn 1 */
-  tim_dec_callback();
+  //tim_dec_callback();
   /* USER CODE END TIM1_TRG_COM_TIM11_IRQn 1 */
 }
 
@@ -398,6 +397,36 @@ void TIM8_UP_TIM13_IRQHandler(void)
   /* USER CODE BEGIN TIM8_UP_TIM13_IRQn 1 */
   debug();
   /* USER CODE END TIM8_UP_TIM13_IRQn 1 */
+}
+
+/**
+  * @brief This function handles TIM8 trigger and commutation interrupts and TIM14 global interrupt.
+  */
+void TIM8_TRG_COM_TIM14_IRQHandler(void)
+{
+  /* USER CODE BEGIN TIM8_TRG_COM_TIM14_IRQn 0 */
+
+  /* USER CODE END TIM8_TRG_COM_TIM14_IRQn 0 */
+  HAL_TIM_IRQHandler(&htim14);
+  /* USER CODE BEGIN TIM8_TRG_COM_TIM14_IRQn 1 */
+  if (melody_counter > 0) {
+	  melody_counter--;
+  } else {
+	  if ((melody_play_cnt+melody_buf_len)%melody_buf_len >= (melody_play_pos+melody_buf_len)%melody_buf_len) {
+		  if (melody_queue[melody_play_pos] == 0) {
+			  HAL_TIM_PWM_Stop(&htim2, TIM_CHANNEL_1);
+		  } else {
+			  TIM2->ARR = melody_queue[melody_play_pos];
+			  HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_1);
+			  melody_counter = melody_len_queue[melody_play_pos];
+		  }
+		  melody_play_pos++;
+		  melody_play_pos %= melody_buf_len;
+	  } else {
+		  HAL_TIM_PWM_Stop(&htim2, TIM_CHANNEL_1);
+	  }
+  }
+  /* USER CODE END TIM8_TRG_COM_TIM14_IRQn 1 */
 }
 
 /**

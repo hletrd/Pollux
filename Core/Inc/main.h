@@ -45,6 +45,15 @@ extern int32_t ser_last;
 extern int GUIDE_STATE[4];
 extern float vin, iin;
 
+#define melody_buf_len 100
+extern float melody_queue[melody_buf_len];
+extern int melody_len_queue[melody_buf_len];
+extern int melody_play_cnt;
+extern int melody_play_pos;
+extern int melody_counter;
+
+extern TIM_HandleTypeDef htim2;
+
 /* USER CODE END ET */
 
 /* Exported constants --------------------------------------------------------*/
@@ -110,8 +119,6 @@ extern void debug();
 #define NENBL2_GPIO_Port GPIOC
 #define ISEN_Pin GPIO_PIN_0
 #define ISEN_GPIO_Port GPIOB
-#define VSEN_Pin GPIO_PIN_1
-#define VSEN_GPIO_Port GPIOB
 #define NENBL1_Pin GPIO_PIN_2
 #define NENBL1_GPIO_Port GPIOB
 #define ACC1_TX_Pin GPIO_PIN_10
