@@ -254,6 +254,12 @@ int melody_counter;
 #define A_Hz 440.00
 #define B_Hz 493.88
 
+#define d_Hz 277.18
+#define e_Hz 311.13
+#define g_Hz 369.99
+#define a_Hz 415.30
+#define b_Hz 466.16
+
 #define melody_base_counter 10000
 
 /* USER CODE END PV */
@@ -885,6 +891,7 @@ void serial_decode() {
 
 void melody_add(int note, int octave, int length) {
 	float freq, counter;
+	octave += 1;
 	switch (note) {
 	case 'C':
 		freq = C_Hz * pow(2, octave);
@@ -907,10 +914,26 @@ void melody_add(int note, int octave, int length) {
 	case 'B':
 		freq = B_Hz * pow(2, octave);
 		break;
+	case 'd':
+		freq = d_Hz * pow(2, octave);
+		break;
+	case 'e':
+		freq = e_Hz * pow(2, octave);
+		break;
+	case 'g':
+		freq = g_Hz * pow(2, octave);
+		break;
+	case 'a':
+		freq = a_Hz * pow(2, octave);
+		break;
+	case 'b':
+		freq = b_Hz * pow(2, octave);
+		break;
 	default:
-		freq = C_Hz;
+		freq = 0;
 	}
-	counter = 100000.0 / freq * 221.63;
+	if (freq == 0) counter = 0;
+	else counter = 10500000.0 / freq;
 	melody_queue[melody_play_cnt] = counter;
 	melody_len_queue[melody_play_cnt] = length;
 	melody_play_cnt++;
@@ -939,9 +962,11 @@ void uart_printlli(int64_t output) {
 }
 
 RTC_TimeTypeDef get_time_now() {
-	RTC_TimeTypeDef tmp;
-	HAL_RTC_GetTime(&hrtc, &tmp, RTC_FORMAT_BIN);
-	return tmp;
+	RTC_TimeTypeDef tmp_time;
+	RTC_DateTypeDef tmp_date;
+	HAL_RTC_GetTime(&hrtc, &tmp_time, RTC_FORMAT_BIN);
+	HAL_RTC_GetDate(&hrtc, &tmp_date, RTC_FORMAT_BIN);
+	return tmp_time;
 }
 
 RTC_DateTypeDef get_date_now() {
@@ -1253,7 +1278,7 @@ void debug() {
 		HAL_ADC_Start_IT(&hadc1);
 		adc_mode = 1;
 	} else {
-		//HAL_ADC_Start_IT(&hadc2);
+		HAL_ADC_Start_IT(&hadc1);
 		adc_mode = 0;
 	}
 
@@ -1359,6 +1384,14 @@ void debug() {
 		uart_printf(iin);
 		uart_print("\n");
 
+
+
+		RTC_TimeTypeDef time_tmp = get_time_now();
+		uart_print("Time now:");
+		sprintf(output, "%02d:%02d:%02d", time_tmp.Hours, time_tmp.Minutes, time_tmp.Seconds);
+		uart_print(output);
+		uart_print("\n");
+
 		uart_print("\n\n");
 
 		dbg_counter++;
@@ -1370,7 +1403,7 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc) {
 	int adc_tmp;
 	if (adc_mode == 0) {
 		adc_tmp = HAL_ADC_GetValue(hadc);
-		vin = (float)adc_tmp * 7.05 / 4096.0 * 1000.0;
+		vin = (float)adc_tmp * 500 / 4096.0 * 1000.0;
 	} else {
 		adc_tmp = HAL_ADC_GetValue(hadc);
 		iin = (float)adc_tmp / 16384.0 / 15.0 * 20.0 * 1000.0;
@@ -1468,14 +1501,126 @@ int main(void)
   //initialize
 
   //HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_1);
-  melody_add('C', 1, 4);
+  /*melody_add('C', 1, 4);
   melody_add('E', 1, 4);
   melody_add('G', 1, 4);
-  melody_add('C', 2, 4);
-  melody_add('C', 1, 4);
-  melody_add('E', 1, 4);
+  melody_add('C', 2, 8);*/
+  melody_add('D', 1, 4);
+  melody_add('B', 1, 4);
+  melody_add('A', 1, 4);
   melody_add('G', 1, 4);
+
+  melody_add('D', 1, 11);
+  melody_add('.', 1, 1);
+  melody_add('D', 1, 1);
+  melody_add('.', 1, 1);
+  melody_add('D', 1, 1);
+  melody_add('.', 1, 1);
+
+  melody_add('D', 1, 4);
+  melody_add('B', 1, 4);
+  melody_add('A', 1, 4);
+  melody_add('G', 1, 4);
+
+  melody_add('E', 1, 12);
+  melody_add('.', 1, 4);
+
+  melody_add('E', 1, 4);
   melody_add('C', 2, 4);
+  melody_add('B', 1, 4);
+  melody_add('A', 1, 4);
+
+  melody_add('g', 1, 12);
+  melody_add('.', 1, 4);
+
+  melody_add('D', 2, 3);
+  melody_add('.', 1, 1);
+  melody_add('D', 2, 4);
+  melody_add('C', 2, 4);
+  melody_add('A', 1, 4);
+
+  melody_add('B', 1, 16);
+
+  melody_add('D', 1, 4);
+  melody_add('B', 1, 4);
+  melody_add('A', 1, 4);
+  melody_add('G', 1, 4);
+
+  melody_add('D', 1, 12);
+  melody_add('.', 1, 4);
+
+  melody_add('D', 1, 4);
+  melody_add('B', 1, 4);
+  melody_add('A', 1, 4);
+  melody_add('G', 1, 4);
+
+  melody_add('E', 1, 11);
+  melody_add('.', 1, 1);
+  melody_add('E', 1, 3);
+  melody_add('.', 1, 1);
+
+  melody_add('E', 1, 4);
+  melody_add('C', 2, 4);
+  melody_add('B', 1, 4);
+  melody_add('A', 1, 4);
+
+  melody_add('D', 2, 3);
+  melody_add('.', 1, 1);
+  melody_add('D', 2, 3);
+  melody_add('.', 1, 1);
+  melody_add('D', 2, 3);
+  melody_add('.', 1, 1);
+  melody_add('D', 2, 3);
+  melody_add('.', 1, 1);
+
+  melody_add('E', 2, 4);
+  melody_add('D', 2, 4);
+  melody_add('C', 2, 4);
+  melody_add('A', 1, 4);
+
+  melody_add('G', 1, 12);
+  melody_add('.', 1, 4);
+
+  melody_add('B', 1, 3);
+  melody_add('.', 1, 1);
+  melody_add('B', 1, 3);
+  melody_add('.', 1, 1);
+  melody_add('B', 1, 7);
+  melody_add('.', 1, 1);
+
+  melody_add('B', 1, 3);
+  melody_add('.', 1, 1);
+  melody_add('B', 1, 3);
+  melody_add('.', 1, 1);
+  melody_add('B', 1, 7);
+  melody_add('.', 1, 1);
+
+  melody_add('B', 1, 4);
+  melody_add('D', 2, 4);
+  melody_add('G', 1, 6);
+  melody_add('A', 1, 2);
+
+  melody_add('B', 1, 12);
+  melody_add('.', 1, 4);
+
+  melody_add('C', 2, 3);
+  melody_add('.', 1, 1);
+  melody_add('C', 2, 3);
+  melody_add('.', 1, 1);
+  melody_add('C', 2, 5);
+  melody_add('.', 1, 1);
+  melody_add('C', 2, 1);
+  melody_add('.', 1, 1);
+
+  melody_add('C', 2, 4);
+  melody_add('B', 1, 3);
+  melody_add('.', 1, 1);
+  melody_add('B', 1, 3);
+  melody_add('.', 1, 1);
+  melody_add('B', 1, 1);
+  melody_add('.', 1, 1);
+  melody_add('B', 1, 1);
+  melody_add('.', 1, 1);
 
 
   HAL_TIM_Base_Start_IT(&htim10);
@@ -1591,13 +1736,13 @@ static void MX_ADC1_Init(void)
   hadc1.Instance = ADC1;
   hadc1.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV4;
   hadc1.Init.Resolution = ADC_RESOLUTION_12B;
-  hadc1.Init.ScanConvMode = DISABLE;
+  hadc1.Init.ScanConvMode = ENABLE;
   hadc1.Init.ContinuousConvMode = DISABLE;
   hadc1.Init.DiscontinuousConvMode = DISABLE;
   hadc1.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
   hadc1.Init.ExternalTrigConv = ADC_SOFTWARE_START;
   hadc1.Init.DataAlign = ADC_DATAALIGN_RIGHT;
-  hadc1.Init.NbrOfConversion = 1;
+  hadc1.Init.NbrOfConversion = 2;
   hadc1.Init.DMAContinuousRequests = DISABLE;
   hadc1.Init.EOCSelection = ADC_EOC_SINGLE_CONV;
   if (HAL_ADC_Init(&hadc1) != HAL_OK)
@@ -1609,6 +1754,14 @@ static void MX_ADC1_Init(void)
   sConfig.Channel = ADC_CHANNEL_8;
   sConfig.Rank = 1;
   sConfig.SamplingTime = ADC_SAMPLETIME_15CYCLES;
+  if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /** Configure for the selected ADC regular channel its corresponding rank in the sequencer and its sample time.
+  */
+  sConfig.Channel = ADC_CHANNEL_9;
+  sConfig.Rank = 2;
   if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
   {
     Error_Handler();
@@ -1691,8 +1844,8 @@ static void MX_RTC_Init(void)
 
   /** Initialize RTC and set the Time and Date
   */
-  sTime.Hours = 0x20;
-  sTime.Minutes = 0x14;
+  sTime.Hours = 0x3;
+  sTime.Minutes = 0x4;
   sTime.Seconds = 0x50;
   sTime.DayLightSaving = RTC_DAYLIGHTSAVING_NONE;
   sTime.StoreOperation = RTC_STOREOPERATION_SET;
@@ -1702,7 +1855,7 @@ static void MX_RTC_Init(void)
   }
   sDate.WeekDay = RTC_WEEKDAY_THURSDAY;
   sDate.Month = RTC_MONTH_DECEMBER;
-  sDate.Date = 0x3;
+  sDate.Date = 0x17;
   sDate.Year = 0x20;
 
   if (HAL_RTC_SetDate(&hrtc, &sDate, RTC_FORMAT_BCD) != HAL_OK)
@@ -1735,7 +1888,7 @@ static void MX_TIM2_Init(void)
 
   /* USER CODE END TIM2_Init 1 */
   htim2.Instance = TIM2;
-  htim2.Init.Prescaler = 15;
+  htim2.Init.Prescaler = 8;
   htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
   htim2.Init.Period = 9999;
   htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
@@ -1760,7 +1913,7 @@ static void MX_TIM2_Init(void)
     Error_Handler();
   }
   sConfigOC.OCMode = TIM_OCMODE_PWM1;
-  sConfigOC.Pulse = 50;
+  sConfigOC.Pulse = 2000;
   sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
   sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
   if (HAL_TIM_PWM_ConfigChannel(&htim2, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
@@ -1949,7 +2102,7 @@ static void MX_TIM14_Init(void)
 
   /* USER CODE END TIM14_Init 1 */
   htim14.Instance = TIM14;
-  htim14.Init.Prescaler = 1999;
+  htim14.Init.Prescaler = 2099;
   htim14.Init.CounterMode = TIM_COUNTERMODE_UP;
   htim14.Init.Period = 2499;
   htim14.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;

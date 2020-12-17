@@ -310,7 +310,7 @@ void TIM1_UP_TIM10_IRQHandler(void)
   /* USER CODE END TIM1_UP_TIM10_IRQn 0 */
   HAL_TIM_IRQHandler(&htim10);
   /* USER CODE BEGIN TIM1_UP_TIM10_IRQn 1 */
-  //tim_ra_callback();
+  tim_ra_callback();
   /* USER CODE END TIM1_UP_TIM10_IRQn 1 */
 }
 
@@ -324,7 +324,7 @@ void TIM1_TRG_COM_TIM11_IRQHandler(void)
   /* USER CODE END TIM1_TRG_COM_TIM11_IRQn 0 */
   HAL_TIM_IRQHandler(&htim11);
   /* USER CODE BEGIN TIM1_TRG_COM_TIM11_IRQn 1 */
-  //tim_dec_callback();
+  tim_dec_callback();
   /* USER CODE END TIM1_TRG_COM_TIM11_IRQn 1 */
 }
 
@@ -417,8 +417,9 @@ void TIM8_TRG_COM_TIM14_IRQHandler(void)
 			  HAL_TIM_PWM_Stop(&htim2, TIM_CHANNEL_1);
 		  } else {
 			  TIM2->ARR = melody_queue[melody_play_pos];
+			  TIM2->CCR1 = TIM2->ARR/2;
 			  HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_1);
-			  melody_counter = melody_len_queue[melody_play_pos];
+			  melody_counter = melody_len_queue[melody_play_pos] - 1;
 		  }
 		  melody_play_pos++;
 		  melody_play_pos %= melody_buf_len;
