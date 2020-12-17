@@ -1501,11 +1501,11 @@ int main(void)
   //initialize
 
   //HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_1);
-  /*melody_add('C', 1, 4);
+  melody_add('C', 1, 4);
   melody_add('E', 1, 4);
   melody_add('G', 1, 4);
-  melody_add('C', 2, 8);*/
-  melody_add('D', 1, 4);
+  melody_add('C', 2, 8);
+  /*melody_add('D', 1, 4);
   melody_add('B', 1, 4);
   melody_add('A', 1, 4);
   melody_add('G', 1, 4);
@@ -1620,7 +1620,7 @@ int main(void)
   melody_add('B', 1, 1);
   melody_add('.', 1, 1);
   melody_add('B', 1, 1);
-  melody_add('.', 1, 1);
+  melody_add('.', 1, 1);*/
 
 
   HAL_TIM_Base_Start_IT(&htim10);
