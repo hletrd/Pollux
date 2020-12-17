@@ -45,7 +45,7 @@ extern int32_t ser_last;
 extern int GUIDE_STATE[4];
 extern float vin, iin;
 
-#define melody_buf_len 100
+#define melody_buf_len 300
 extern float melody_queue[melody_buf_len];
 extern int melody_len_queue[melody_buf_len];
 extern int melody_play_cnt;
@@ -79,6 +79,7 @@ extern void tim_ra_callback();
 extern void tim_dec_callback();
 extern void tim_acc_callback();
 extern void debug();
+extern void led_set(int lednum, int ledstate);
 
 /* USER CODE END EFP */
 
@@ -101,10 +102,6 @@ extern void debug();
 #define MUART2_TX_GPIO_Port GPIOA
 #define MUART2_Pin GPIO_PIN_1
 #define MUART2_GPIO_Port GPIOA
-#define ACC2_TX_Pin GPIO_PIN_2
-#define ACC2_TX_GPIO_Port GPIOA
-#define ACC2_RX_Pin GPIO_PIN_3
-#define ACC2_RX_GPIO_Port GPIOA
 #define STEP2_Pin GPIO_PIN_4
 #define STEP2_GPIO_Port GPIOA
 #define DIR2_Pin GPIO_PIN_5

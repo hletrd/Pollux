@@ -114,7 +114,6 @@ TIM_HandleTypeDef htim14;
 UART_HandleTypeDef huart4;
 UART_HandleTypeDef huart5;
 UART_HandleTypeDef huart1;
-UART_HandleTypeDef huart2;
 UART_HandleTypeDef huart3;
 UART_HandleTypeDef huart6;
 
@@ -271,7 +270,6 @@ static void MX_ADC1_Init(void);
 static void MX_UART4_Init(void);
 static void MX_UART5_Init(void);
 static void MX_USART1_UART_Init(void);
-static void MX_USART2_UART_Init(void);
 static void MX_USART3_UART_Init(void);
 static void MX_USART6_UART_Init(void);
 static void MX_I2C1_Init(void);
@@ -1443,7 +1441,6 @@ int main(void)
   MX_UART4_Init();
   MX_UART5_Init();
   MX_USART1_UART_Init();
-  MX_USART2_UART_Init();
   MX_USART3_UART_Init();
   MX_USART6_UART_Init();
   MX_I2C1_Init();
@@ -1501,11 +1498,11 @@ int main(void)
   //initialize
 
   //HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_1);
-  melody_add('C', 1, 4);
+  /*melody_add('C', 1, 4);
   melody_add('E', 1, 4);
   melody_add('G', 1, 4);
-  melody_add('C', 2, 8);
-  /*melody_add('D', 1, 4);
+  melody_add('C', 2, 8);*/
+  melody_add('D', 1, 4);
   melody_add('B', 1, 4);
   melody_add('A', 1, 4);
   melody_add('G', 1, 4);
@@ -1620,8 +1617,66 @@ int main(void)
   melody_add('B', 1, 1);
   melody_add('.', 1, 1);
   melody_add('B', 1, 1);
-  melody_add('.', 1, 1);*/
+  melody_add('.', 1, 1);
 
+melody_add('B', 1, 4);
+melody_add('A', 1, 3);
+melody_add('.', 1, 1);
+melody_add('A', 1, 4);
+melody_add('B', 1, 4);
+
+melody_add('A', 1, 8);
+melody_add('D', 2, 8);
+
+melody_add('B', 1, 3);
+melody_add('.', 1, 1);
+melody_add('B', 1, 3);
+melody_add('.', 1, 1);
+melody_add('B', 1, 7);
+melody_add('.', 1, 1);
+
+melody_add('B', 1, 3);
+melody_add('.', 1, 1);
+melody_add('B', 1, 3);
+melody_add('.', 1, 1);
+melody_add('B', 1, 7);
+melody_add('.', 1, 1);
+
+melody_add('B', 1, 4);
+melody_add('D', 2, 4);
+melody_add('G', 1, 6);
+melody_add('A', 1, 2);
+
+melody_add('B', 1, 12);
+melody_add('.', 1, 4);
+
+melody_add('C', 2, 3);
+melody_add('.', 1, 1);
+melody_add('C', 2, 3);
+melody_add('.', 1, 1);
+melody_add('C', 2, 5);
+melody_add('.', 1, 1);
+melody_add('C', 2, 1);
+melody_add('.', 1, 1);
+
+melody_add('C', 2, 4);
+melody_add('B', 1, 3);
+melody_add('.', 1, 1);
+melody_add('B', 1, 3);
+melody_add('.', 1, 1);
+melody_add('B', 1, 1);
+melody_add('.', 1, 1);
+melody_add('B', 1, 1);
+melody_add('.', 1, 1);
+
+melody_add('D', 2, 3);
+melody_add('.', 1, 1);
+melody_add('D', 2, 4);
+melody_add('C', 2, 4);
+melody_add('A', 1, 4);
+
+melody_add('G', 1, 12);
+melody_add('.', 1, 4);
 
   HAL_TIM_Base_Start_IT(&htim10);
   HAL_TIM_Base_Start_IT(&htim11);
@@ -2217,39 +2272,6 @@ static void MX_USART1_UART_Init(void)
 }
 
 /**
-  * @brief USART2 Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_USART2_UART_Init(void)
-{
-
-  /* USER CODE BEGIN USART2_Init 0 */
-
-  /* USER CODE END USART2_Init 0 */
-
-  /* USER CODE BEGIN USART2_Init 1 */
-
-  /* USER CODE END USART2_Init 1 */
-  huart2.Instance = USART2;
-  huart2.Init.BaudRate = 9600;
-  huart2.Init.WordLength = UART_WORDLENGTH_8B;
-  huart2.Init.StopBits = UART_STOPBITS_1;
-  huart2.Init.Parity = UART_PARITY_NONE;
-  huart2.Init.Mode = UART_MODE_TX_RX;
-  huart2.Init.HwFlowCtl = UART_HWCONTROL_NONE;
-  huart2.Init.OverSampling = UART_OVERSAMPLING_16;
-  if (HAL_UART_Init(&huart2) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN USART2_Init 2 */
-
-  /* USER CODE END USART2_Init 2 */
-
-}
-
-/**
   * @brief USART3 Initialization Function
   * @param None
   * @retval None
@@ -2343,7 +2365,7 @@ static void MX_GPIO_Init(void)
 
   /*Configure GPIO pin : ESP_PROG_Pin */
   GPIO_InitStruct.Pin = ESP_PROG_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_OD;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(ESP_PROG_GPIO_Port, &GPIO_InitStruct);
@@ -2354,17 +2376,19 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
+  /*Configure GPIO pins : PA2 PA3 INDEX2_Pin INDEX1_Pin
+                           DIAG1_Pin */
+  GPIO_InitStruct.Pin = GPIO_PIN_2|GPIO_PIN_3|INDEX2_Pin|INDEX1_Pin
+                          |DIAG1_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
   /*Configure GPIO pins : STEP2_Pin DIR2_Pin STDBY2_Pin STDBY1_Pin */
   GPIO_InitStruct.Pin = STEP2_Pin|DIR2_Pin|STDBY2_Pin|STDBY1_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
-  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-
-  /*Configure GPIO pins : INDEX2_Pin INDEX1_Pin DIAG1_Pin */
-  GPIO_InitStruct.Pin = INDEX2_Pin|INDEX1_Pin|DIAG1_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
   /*Configure GPIO pin : DIAG2_Pin */

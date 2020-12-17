@@ -67,7 +67,6 @@ extern TIM_HandleTypeDef htim14;
 extern UART_HandleTypeDef huart4;
 extern UART_HandleTypeDef huart5;
 extern UART_HandleTypeDef huart1;
-extern UART_HandleTypeDef huart2;
 extern UART_HandleTypeDef huart3;
 extern UART_HandleTypeDef huart6;
 /* USER CODE BEGIN EV */
@@ -344,20 +343,6 @@ void USART1_IRQHandler(void)
 }
 
 /**
-  * @brief This function handles USART2 global interrupt.
-  */
-void USART2_IRQHandler(void)
-{
-  /* USER CODE BEGIN USART2_IRQn 0 */
-
-  /* USER CODE END USART2_IRQn 0 */
-  HAL_UART_IRQHandler(&huart2);
-  /* USER CODE BEGIN USART2_IRQn 1 */
-
-  /* USER CODE END USART2_IRQn 1 */
-}
-
-/**
   * @brief This function handles USART3 global interrupt.
   */
 void USART3_IRQHandler(void)
@@ -415,12 +400,14 @@ void TIM8_TRG_COM_TIM14_IRQHandler(void)
 	  if ((melody_play_cnt+melody_buf_len)%melody_buf_len >= (melody_play_pos+melody_buf_len)%melody_buf_len) {
 		  if (melody_queue[melody_play_pos] == 0) {
 			  HAL_TIM_PWM_Stop(&htim2, TIM_CHANNEL_1);
+			  led_set(1, 0);
 		  } else {
 			  TIM2->ARR = melody_queue[melody_play_pos];
 			  TIM2->CCR1 = TIM2->ARR/2;
 			  HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_1);
-			  melody_counter = melody_len_queue[melody_play_pos] - 1;
+			  led_set(1, 1);
 		  }
+		  melody_counter = melody_len_queue[melody_play_pos] - 1;
 		  melody_play_pos++;
 		  melody_play_pos %= melody_buf_len;
 	  } else {
